@@ -1,0 +1,110 @@
+auth:
+  uri: "https://ident.services"
+  client_id: "sync-account@dienstleister.example"
+  client_secret: "***"
+
+samedis:
+  uri: "https://sync.samedis.care"
+  api_version: "v4"
+
+actimed:
+  database_path: "C:\\Program Files (x86)\\Actimed3\\actimed3db.mdb"
+  # Pickup-Verzeichnis für Modus 1 (PDF-Watcher).
+  # Hier landen die vom Techniker aus Actimed gedruckten Prüfprotokolle (PDF).
+  # Voraussetzung: Actimed Extras -> Optionen -> "Name des Druckauftrags" auf
+  # "Inventarnummer_Prüfberichtsnummer" setzen, plus PDF-Drucker mit Auto-Save.
+  protocol_pdf_dir: "C:\\Users\\Public\\Documents\\Actimed\\Reports"
+  use_local_snapshot: true
+  default_tester_name: "Servicetechniker"
+
+branding:
+  service_provider_name: "Mein Dienstleister GmbH"
+  logo_path: "C:\\ProgramData\\SamedisCare\\SplSync\\logo.png"
+
+tenants:
+  - name: "Mandant 1"
+    samedis_tenant_id: "<24-stelliger ObjectId aus Samedis>"
+    actimed_cust_ids: [4, 7]
+    enabled: true
+  - name: "Mandant 2"
+    samedis_tenant_id: "<...>"
+    actimed_cust_ids: [5]
+    enabled: true
+
+sync:
+  # Wie oft offene Aufträge + Inventar-Updates aus Samedis geholt werden.
+  download_interval_minutes: 15
+  # Wie oft die Actimed-DB nach neuen Prüfungen abgefragt wird (Modus 2).
+  upload_poll_interval_seconds: 30
+  run_on_network_reconnect: true
+
+  download_inventories: true
+  download_open_issues: true
+  upload_finished_issues: true   # Master-Schalter
+
+  # ---- Upload-Modi ----
+  #
+  # Modus 1 - Techniker arbeitet primaer in Actimed:
+  #   - Prüfung wird in Actimed durchgeführt und gespeichert.
+  #   - Techniker druckt Prüfprotokoll als PDF in protocol_pdf_dir.
+  #   - Watcher erkennt PDF, korreliert Prüfberichtsnummer mit A3_FINISHED_TEST,
+  #     schliesst Samedis-Vorgang inkl. PDF-Anhang ab.
+  upload_mode_pdf_pickup: false
+
+  # Modus 2 - Techniker arbeitet parallel in Samedis (Mobile/Web):
+  #   - In Actimed wird nur die Messung mit dem Prüfgeraet durchgeführt.
+  #   - Sobald die Messung in der DB landet, ziehen wir die Werte und erzeugen
+  #     ein PNG-Wertenachweis-Bild, das wir an den Samedis-Vorgang anhängen.
+  upload_mode_png_on_completion: true
+
+  # Beide Modi gleichzeitig sind erlaubt - Vorgang erhaelt dann beide Anhänge.
+
+  create_issues_from_actimed: false
+  create_inventories_from_actimed: false
+  set_inventory_operation_status_on_failed_maintenance: false
+
+# Wartungsart-Mapping: regex auf Samedis-Wartungstyp/Titel/Services -> Actimed-Tätigkeit.
+#
+# Pflicht-Felder:
+#   actimed_kind   — Name der A3_ACTIVITY_KIND (Tätigkeitsart) in Actimed.
+#                    Muss exakt uebereinstimmen, inkl. Sonderzeichen wie '§'.
+#
+# Optional aber DRINGEND empfohlen:
+#   actimed_activity_name — Name der konkreten A3_ACTIVITY (Tätigkeit) mit hinterlegter
+#                           Pruefvorschrift. Ohne dieses Feld legt der Sync notfalls eine
+#                           Tätigkeit mit TEST_SPEC_ID=1 (=Unbekannt) an — der Techniker
+#                           sieht dann beim Start der Pruefung in Actimed eine LEERE
+#                           Schrittliste, weil keine Pruefvorschrift verknuepft ist.
+#
+# Beispiele unten zeigen pro Wartungsart sowohl den KIND_NAME als auch den ACTIVITY_NAME,
+# wie sie in der Actimed-DB des Pilot-Kunden vorhanden sind. Anpassen!
+maintenance_kind_mapping:
+  - match: "(?i)dguv\\s*v?3|stk.*§\\s*11"
+    actimed_kind: "MPBe_§11_STK/DGUV V3"
+    # actimed_activity_name: "MPBe_§11_STK_DGUV_V3_Standard"   # auf eure Vorschrift anpassen
+
+  - match: "(?i)mtk.*bdm|blutdruck"
+    actimed_kind: "MPBe_MTK_BDM"
+    actimed_activity_name: "MPBe_Prüfung_MTK_BDM"
+
+  - match: "(?i)defi.*aed"
+    actimed_kind: "MPBe_STK Defi (AED)"
+    actimed_activity_name: "MPBe_STK_Defi_AED_DP-300"
+
+  - match: "(?i)wartung|inspektion"
+    actimed_kind: "MPBe_§7_Wartung/Inspektion"
+    # actimed_activity_name: "MPBe_§7_Wartung_Standard"        # auf eure Vorschrift anpassen
+
+  # Fallback (entry without 'match'):
+  - actimed_kind: "MPBe_§7_Wartung/Inspektion"
+
+logging:
+  level: 1     # 0 off, 1 info, 2 debug
+  mode: 3      # 0 none, 1 console, 2 file, 3 console+file
+  directory: "%PROGRAMDATA%\\SamedisCare\\SplSync\\logs"
+
+http:
+  valid_certificate: true
+  proxy: ""
+  proxy_username: ""
+  proxy_password: ""

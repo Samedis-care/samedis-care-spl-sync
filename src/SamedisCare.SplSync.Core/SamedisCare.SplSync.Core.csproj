@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SamedisCare.SplSync.Core</RootNamespace>
+    <AssemblyName>SamedisCare.SplSync.Core</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="RestSharp" Version="112.1.0" />
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.8" />
+    <!-- DPAPI (ProtectedData / DataProtectionScope). Cross-platform package; on non-Windows
+         the calls are no-ops gated by OperatingSystem.IsWindows() in ConfigStore. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="YamlDotNet" Version="15.1.6" />
+  </ItemGroup>
+
+  <!-- System.Data.OleDb: managed package, compiles cross-platform but only functional on Windows.
+       OleDbActimedRepository carries [SupportedOSPlatform("windows")]; the class is always built
+       (so Service/Tray on any host can publish for win-x64) and callers gate at runtime via
+       OperatingSystem.IsWindows(). -->
+  <ItemGroup>
+    <PackageReference Include="System.Data.OleDb" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

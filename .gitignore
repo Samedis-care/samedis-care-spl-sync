@@ -1,0 +1,41 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+artifacts/
+
+# IDEs
+.vs/
+.vscode/
+*.user
+*.suo
+.idea/
+
+# .NET
+*.dll
+*.exe
+*.pdb
+*.lock.json
+project.lock.json
+*.nupkg
+
+# Logs / state
+logs/
+log/
+*.log
+state/
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+
+# Local config (never commit real secrets)
+src/**/config.yml
+config.yml
+
+# OS
+.DS_Store
+Thumbs.db
+spl_data
+deploy

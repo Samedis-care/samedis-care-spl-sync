@@ -1,0 +1,64 @@
+using SamedisCare.SplSync.Core.Actimed;
+using SamedisCare.SplSync.Core.Api;
+using SamedisCare.SplSync.Core.Config;
+
+namespace SamedisCare.SplSync.Core.Sync;
+
+/// <summary>
+/// Per-tenant runtime context — composed once per sync cycle.
+/// Holds the authenticated Samedis client, the tenant-specific URL prefix,
+/// the Actimed repo handle, and convenience accessors for state/cursor.
+/// </summary>
+public class SyncContext
+{
+    public required AppConfig Config { get; init; }
+    public required TenantConfig Tenant { get; init; }
+    public required ISyncLog Log { get; init; }
+    public required RequestData Samedis { get; init; }
+    public required IActimedRepository Actimed { get; init; }
+    public required StateDb State { get; init; }
+    public required Cursor Cursor { get; init; }
+    public required IssueLinkStore IssueLinks { get; init; }
+    public required MaintenanceKindMapper KindMapper { get; init; }
+
+    /// <summary>e.g. "/api/v4/tenants/&lt;tenant_id&gt;"</summary>
+    public string TenantScope =>
+        $"/api/{Config.Samedis.ApiVersion}/tenants/{Tenant.SamedisTenantId}";
+}
+
+/// <summary>
+/// Builds a SyncContext for a tenant: authenticate, set up the Actimed repo, etc.
+/// </summary>
+public static class SyncContextBuilder
+{
+    public static SyncContext Build(
+        AppConfig config,
+        TenantConfig tenant,
+        IActimedRepository actimed,
+        StateDb state,
+        ISyncLog log)
+    {
+        var http = config.Http.ToSettings();
+        var auth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, http, log);
+        if (auth.StatusCode is < 200 or >= 300 || string.IsNullOrEmpty(auth.BearerToken))
+            throw new InvalidOperationException($"Authentication failed (status={auth.StatusCode}). Check auth.* in config.yml.");
+
+        var samedis = new RequestData(config.Samedis.Uri, auth.BearerToken, http, log);
+        var cursor = new Cursor(state);
+        var issueLinks = new IssueLinkStore(state);
+        var mapper = new MaintenanceKindMapper(config.MaintenanceKindMapping);
+
+        return new SyncContext
+        {
+            Config = config,
+            Tenant = tenant,
+            Log = log,
+            Samedis = samedis,
+            Actimed = actimed,
+            State = state,
+            Cursor = cursor,
+            IssueLinks = issueLinks,
+            KindMapper = mapper
+        };
+    }
+}

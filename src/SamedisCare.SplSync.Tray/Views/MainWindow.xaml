@@ -1,0 +1,264 @@
+<Window x:Class="SamedisCare.SplSync.Tray.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SamedisCare SplSync — Übersicht"
+        Width="900" Height="640"
+        WindowStartupLocation="CenterScreen"
+        Icon="pack://application:,,,/assets/samedis-logo.png">
+    <Window.Resources>
+        <!-- Wiederverwendbare Styles für den Settings-Tab. Wir halten das Markup
+             damit kompakt — sonst wird der Tab eine Wand aus Margin-Wiederholungen. -->
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,8,12,2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="FieldHint" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="Foreground" Value="#666"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,16,0,4"/>
+            <Setter Property="Foreground" Value="#003560"/>
+        </Style>
+        <Style x:Key="FieldInput" TargetType="TextBox">
+            <Setter Property="Margin" Value="0,2,0,2"/>
+            <Setter Property="Padding" Value="6,4"/>
+        </Style>
+    </Window.Resources>
+    <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12">
+            <TextBlock Text="Status:" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center"/>
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center"/>
+            <Button x:Name="SyncNowButton" Content="Jetzt synchronisieren" Margin="24,0,0,0" Padding="12,4" Click="SyncNow_Click"/>
+            <Button x:Name="MapTenantsButton" Content="Mandanten zuordnen..." Margin="8,0,0,0" Padding="12,4" Click="MapTenants_Click"/>
+        </StackPanel>
+
+        <TabControl x:Name="MainTabs" Margin="12,0,12,12">
+            <TabItem Header="Mandanten">
+                <DataGrid x:Name="TenantsGrid" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,8,0,0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name"  Binding="{Binding Name}"           Width="200"/>
+                        <DataGridTextColumn Header="Tenant ID" Binding="{Binding SamedisTenantId}" Width="220"/>
+                        <DataGridTextColumn Header="CUST_IDs" Binding="{Binding CustIds}"    Width="120"/>
+                        <DataGridCheckBoxColumn Header="Aktiv" Binding="{Binding Enabled, Mode=OneWay}" Width="60"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="Letzte Meldungen">
+                <!-- ReadOnly TextBox statt ListBox: erlaubt Ctrl+A/Ctrl+C zum Kopieren der
+                     vollständigen Meldungen inkl. URLs und Response-Bodies. -->
+                <TextBox x:Name="ErrorsList"
+                         Margin="0,8,0,0"
+                         IsReadOnly="True"
+                         FontFamily="Consolas, Menlo, monospace"
+                         FontSize="12"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"/>
+            </TabItem>
+            <TabItem Header="Wartungsart-Mapping">
+                <DockPanel LastChildFill="True">
+                    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="8,8,0,0" Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="AddMappingButton"     Content="+ Eintrag"      Padding="14,4" Click="AddMapping_Click"/>
+                            <Button x:Name="RemoveMappingButton"  Content="− Eintrag"      Padding="14,4" Margin="6,0,0,0" Click="RemoveMapping_Click"/>
+                            <Button x:Name="SaveMappingButton"    Content="Speichern"      Padding="16,6" Margin="20,0,0,0" Click="SaveMapping_Click" IsDefault="True"/>
+                            <Button x:Name="ReloadMappingButton"  Content="Verwerfen / Neu laden" Padding="16,6" Margin="8,0,0,0" Click="ReloadMapping_Click"/>
+                            <TextBlock x:Name="MappingStatus" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="#006600"/>
+                        </StackPanel>
+                    </Border>
+
+                    <DockPanel DockPanel.Dock="Top" Margin="0,8,0,4">
+                        <TextBlock TextWrapping="Wrap" Foreground="#444"
+                                   Text="Pro Zeile eine Mapping-Regel. Erste passende Regex gewinnt; Eintrag mit leerem 'Match' ist der Fallback. 'Actimed Kind' muss exakt mit A3_ACTIVITY_KIND.KIND_NAME uebereinstimmen (inkl. Sonderzeichen wie §). 'Activity Name' ist optional aber empfohlen — ohne diesen Eintrag erzeugt der Sync eine Tätigkeit ohne Pruefvorschrift, das Pruefprotokoll in Actimed bleibt dann leer."/>
+                    </DockPanel>
+
+                    <DataGrid x:Name="MappingGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              SelectionMode="Single"
+                              Margin="0,8,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Match (Regex)" Binding="{Binding Match,               UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                            <DataGridTextColumn Header="Actimed Kind"  Binding="{Binding ActimedKind,         UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                            <DataGridTextColumn Header="Activity Name (Pruefvorschrift)"
+                                                Binding="{Binding ActimedActivityName, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ====== Einstellungen ======================================== -->
+            <TabItem x:Name="SettingsTab" Header="Einstellungen">
+                <DockPanel LastChildFill="True">
+                    <!-- Footer: Speichern + Abbrechen + Status -->
+                    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="8,8,0,0" Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="SaveSettingsButton" Content="Speichern" Padding="16,6" Click="SaveSettings_Click" IsDefault="True"/>
+                            <Button x:Name="ReloadSettingsButton" Content="Verwerfen / Neu laden" Padding="16,6" Margin="8,0,0,0" Click="ReloadSettings_Click"/>
+                            <TextBlock x:Name="SettingsStatus" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="#006600"/>
+                        </StackPanel>
+                    </Border>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="4,8,16,8">
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Authentifizierung"/>
+                            <TextBlock Style="{StaticResource FieldHint}"
+                                       Text="OAuth-Endpoint und Service-Account zur Anmeldung an Samedis."/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Auth-URI"/>
+                            <TextBox x:Name="AuthUri" Style="{StaticResource FieldInput}"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Client-ID (E-Mail)"/>
+                            <TextBox x:Name="AuthClientId" Style="{StaticResource FieldInput}"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Client-Secret (Passwort)"/>
+                            <PasswordBox x:Name="AuthClientSecret" Margin="0,2,0,2" Padding="6,4"/>
+                            <TextBlock Style="{StaticResource FieldHint}"
+                                       Text="Wird in der config.yml mit DPAPI verschlüsselt abgelegt."/>
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Samedis API"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Base-URI"/>
+                            <TextBox x:Name="SamedisUri" Style="{StaticResource FieldInput}"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="API-Version"/>
+                            <TextBox x:Name="SamedisApiVersion" Style="{StaticResource FieldInput}"/>
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Actimed"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Pfad zur actimed3db.mdb"/>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Durchsuchen..." Margin="6,2,0,2" Padding="8,4" Click="BrowseDatabasePath_Click"/>
+                                <TextBox x:Name="ActimedDatabasePath" Style="{StaticResource FieldInput}"/>
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="PDF-Pickup-Verzeichnis (Modus 1)"/>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Durchsuchen..." Margin="6,2,0,2" Padding="8,4" Click="BrowseProtocolPdfDir_Click"/>
+                                <TextBox x:Name="ActimedProtocolPdfDir" Style="{StaticResource FieldInput}"/>
+                            </DockPanel>
+                            <CheckBox x:Name="ActimedUseLocalSnapshot" Content="Lokalen Snapshot vor Read kopieren (use_local_snapshot)" Margin="0,8,0,0"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Default-Prüfer (Fallback)"/>
+                            <TextBox x:Name="ActimedDefaultTester" Style="{StaticResource FieldInput}"/>
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Branding"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Dienstleister-Name"/>
+                            <TextBox x:Name="BrandingName" Style="{StaticResource FieldInput}"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Logo-Pfad (PNG, für Werteprotokolle)"/>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Durchsuchen..." Margin="6,2,0,2" Padding="8,4" Click="BrowseLogoPath_Click"/>
+                                <TextBox x:Name="BrandingLogoPath" Style="{StaticResource FieldInput}"/>
+                            </DockPanel>
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Sync-Verhalten"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Download-Intervall (Minuten)"/>
+                                    <TextBox x:Name="SyncDownloadIntervalMinutes" Style="{StaticResource FieldInput}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Upload-Polling (Sekunden, Modus 2)"/>
+                                    <TextBox x:Name="SyncUploadPollSeconds" Style="{StaticResource FieldInput}"/>
+                                </StackPanel>
+                            </Grid>
+                            <CheckBox x:Name="SyncRunOnReconnect" Content="Beim Wiederverbinden mit dem Netzwerk sofort syncen" Margin="0,8,0,0"/>
+                            <CheckBox x:Name="SyncDownloadInventories" Content="Inventare aus Samedis herunterladen" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncDownloadOpenIssues" Content="Offene Wartungsaufträge herunterladen" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncUploadFinishedIssues" Content="Abgeschlossene Prüfungen hochladen (Master)" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncUploadModePdfPickup" Content="Modus 1 — PDF-Pickup-Watcher (Techniker druckt aus Actimed)" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncUploadModePngOnCompletion" Content="Modus 2 — PNG-Wertenachweis aus DB-Polling" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncCreateIssuesFromActimed" Content="Falls noch nicht in Samedis: Vorgang anlegen (selten benötigt)" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncCreateInventoriesFromActimed" Content="Falls noch nicht in Samedis: Inventar anlegen (selten benötigt)" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncSetInventoryOpStatusOnFailed" Content="Bei Prüfung 'nicht bestanden' Inventar auf 'limited_use' setzen" Margin="0,4,0,0"/>
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Logging"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Level (0=off, 1=info, 2=debug)"/>
+                                    <TextBox x:Name="LoggingLevel" Style="{StaticResource FieldInput}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Mode (0=none, 1=console, 2=file, 3=both)"/>
+                                    <TextBox x:Name="LoggingMode" Style="{StaticResource FieldInput}"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Log-Verzeichnis"/>
+                            <TextBox x:Name="LoggingDirectory" Style="{StaticResource FieldInput}"/>
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="HTTP / Proxy"/>
+                            <CheckBox x:Name="HttpValidCertificate" Content="TLS-Zertifikate validieren (deaktivieren nur bei SSL-Inspection-Proxy)" Margin="0,8,0,0"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Proxy-URL (z. B. http://proxy.intern:3128)"/>
+                            <TextBox x:Name="HttpProxy" Style="{StaticResource FieldInput}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Proxy-Benutzer"/>
+                                    <TextBox x:Name="HttpProxyUsername" Style="{StaticResource FieldInput}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Proxy-Passwort"/>
+                                    <PasswordBox x:Name="HttpProxyPassword" Margin="0,2,0,2" Padding="6,4"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="HTTP-Timeout (Sekunden)"/>
+                            <TextBox x:Name="HttpTimeoutSeconds" Style="{StaticResource FieldInput}"/>
+
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Wartung &amp; Reset"/>
+                            <TextBlock Style="{StaticResource FieldHint}"
+                                       Text="Operationen, die du sonst nur per SQL-Tool gegen die actimed3db.mdb fahren koenntest. Alle Operationen respektieren das Actimed-Lock — wenn Actimed offen ist, kommt der bekannte 'Bitte schliessen'-Dialog."/>
+
+                            <Border BorderBrush="#DDD" BorderThickness="1" Padding="10" Margin="0,8,0,0" CornerRadius="4">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Text="Reparatur-Lauf"/>
+                                    <TextBlock Style="{StaticResource FieldHint}"
+                                               Text="Faehrt RepairDeviceForeignKeys über alle vom Sync angelegten Inventare. Setzt LOCATION_ID/STATUS_ID/COST_CENTRE_ID/RESP_PERSON_ID/SUPPLIER_ID auf 1 bzw. 2 (=Ungeprüft), aber NUR wo aktuell 0/NULL drin steht. Manuell vom Techniker korrigierte Werte bleiben erhalten."/>
+                                    <Button x:Name="RepairAllButton" Content="Reparatur-Lauf jetzt starten"
+                                            Padding="14,6" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                            Click="RepairAll_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border BorderBrush="#DDD" BorderThickness="1" Padding="10" Margin="0,8,0,0" CornerRadius="4">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Text="Download-Cursor zurücksetzen"/>
+                                    <TextBlock Style="{StaticResource FieldHint}"
+                                               Text="Löscht den Cursor in der state.sqlite. Der nächste Sync zieht dann ALLE Inventare und offenen Aufträge neu von Samedis (statt nur die Änderungen seit dem letzten Lauf). Sinnvoll, wenn du nach einem Reparatur-Lauf oder einer Konfig-Änderung einen kompletten Re-Pull haben willst."/>
+                                    <Button x:Name="ResetCursorButton" Content="Cursor zurücksetzen (alle aktiven Mandanten)"
+                                            Padding="14,6" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                            Click="ResetCursor_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border BorderBrush="#FFCC99" BorderThickness="1" Background="#FFF8F0" Padding="10" Margin="0,8,0,0" CornerRadius="4">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Foreground="#A04000" Text="Achtung: Sync-Inventare löschen"/>
+                                    <TextBlock Style="{StaticResource FieldHint}"
+                                               Text="Löscht ALLE A3_DEV-Einträge, die der Sync angelegt hat (erkennbar am DEV_Memo='created_by=spl-sync...'), inkl. der zugehörigen A3_IS_ACT_DEV-Prüfplanungen. User-eigene Inventare werden NICHT angefasst. Wirkt nur auf die Mandanten, die in deiner aktiven Tenant-Liste stehen. Nach dem Löschen direkt 'Cursor zurücksetzen' und 'Jetzt synchronisieren' — dann sind die Inventare frisch und mit korrekten FKs wieder da."/>
+                                    <Button x:Name="DeleteSyncDevicesButton" Content="Sync-Inventare löschen..."
+                                            Padding="14,6" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                            Click="DeleteSyncDevices_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Style="{StaticResource FieldHint}" Margin="0,16,0,0"
+                                       Text="Hinweis: Mandanten-Zuordnung und Wartungsart-Mapping pflegst du in den separaten Reitern bzw. über 'Mandanten zuordnen...'."/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
