@@ -34,6 +34,24 @@ Auf macOS/Linux baut der `Core` mitsamt Tests problemlos. Das `Tray`-Projekt
 ist WPF und damit Windows-only — Build dort nur per `dotnet publish -r win-x64`
 (crossbuild geht, debuggen nicht).
 
+`./build-deploy.sh` bündelt das Ganze (restore → test → Single-File-Publish →
+`deploy/`-Ordner mit EXE, `config.yml.example`, `README.txt`); `--zip` legt
+zusätzlich `deploy.zip` an.
+
+## CI / Releases (GitHub Actions)
+
+- **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): bei jedem PR auf
+  `main` und bei Pushes auf `main`/`develop` läuft `build-deploy.sh`. Die fertige
+  EXE hängt als **Artifact** am Actions-Lauf — direkt aus dem PR herunterladbar.
+- **Release** ([.github/workflows/release.yml](.github/workflows/release.yml)):
+  ein Versions-Tag erzeugt ein **GitHub-Release** mit der EXE (+ `deploy.zip`) als
+  dauerhaftem Download:
+
+  ```sh
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
+
 ## Sync-Modi (Kurzfassung)
 
 Das Tool unterstützt zwei Upload-Modi. Sie sind **unabhängige Schalter** und
