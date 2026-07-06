@@ -59,6 +59,126 @@ Download legt bei Bedarf neue Geräte in `A3_DEV` an und plant pro Issue eine
 `A3_IS_ACT_DEV`-Zeile ein, damit der Techniker die Prüfung in Actimed wie
 gewohnt starten kann.
 
+## Sync-Ablauf: Flow-Diagramme & State Machine
+
+Die folgenden Diagramme fassen die komplette Business-Logik zusammen. Details zu
+den einzelnen Entscheidungen stehen in **„Was der Sync automatisch entscheidet"**
+und im **Wartungsart-Mapping**-Kapitel.
+
+### Download (Samedis → Actimed)
+
+```mermaid
+flowchart TD
+  A[Download-Tick<br/>alle download_interval_minutes] --> V{Tenant-ID gültig?<br/>24-stellige ObjectId}
+  V -- nein --> VX[Mandant überspringen<br/>+ klare Meldung]
+  V -- ja --> B[Inventare holen<br/>inventories seit Cursor]
+  B --> C{Gerät in A3_DEV?}
+  C -- nein --> D[MANU / KIND / TYPE / DEV anlegen<br/>DEV_Memo=created_by=spl-sync]
+  C -- ja --> E[vorhandenes Gerät]
+  D --> F[offene maintenance-Issues holen<br/>seit Cursor]
+  E --> F
+  F --> G[pro Issue: device_number → A3_DEV]
+  G --> H[Wartungsart-Mapping<br/>services/title → KIND_NAME]
+  H --> I{Tätigkeit für KIND?}
+  I -- Activity Name im Mapping --> J[FindActivityByName]
+  I -- sonst per KIND_ID --> K[FindActivityByKindId]
+  K --> L{gefunden?}
+  L -- ja --> M[Tätigkeit wiederverwenden]
+  L -- nein --> N{create_activities_from_mapping<br/>UND Test Spec gesetzt?}
+  N -- ja --> O[A3_ACTIVITY anlegen<br/>TEST_SPEC + Intervall aus<br/>with_service_intervals]
+  N -- nein --> P[Issue offen lassen<br/>+ Meldung]
+  J --> Q[A3_IS_ACT_DEV<br/>ACT_DEV_NEXT = due_on]
+  M --> Q
+  O --> Q
+  Q --> R[issue_link speichern<br/>DEV_ID ↔ Samedis-Issue]
+```
+
+### Upload (Actimed → Samedis)
+
+```mermaid
+flowchart TD
+  A[Trigger:<br/>PNG-Polling ~30s ODER PDF-Pickup] --> B[Test aus A3_FINISHED_TEST]
+  B --> C[Issue korrelieren<br/>issue_link → sonst external_id-Suche]
+  C --> D{Issue gefunden?}
+  D -- nein + PDF-Pickup/Config --> E[Issue anlegen]
+  D -- nein + sonst --> F[überspringen]
+  D -- ja --> G[PUT status=done<br/>+ test_result + Intervall<br/>with_service_intervals]
+  E --> G
+  G --> H[Anhang hochladen<br/>PNG-Wertenachweis bzw. Actimed-PDF]
+  H --> I{create_planned_issue_after_completion?}
+  I -- ja + noch nicht angelegt --> J[POST Folgemaßnahme<br/>status=_new<br/>due_on = Prüfdatum + Intervall]
+  I -- nein --> K[fertig]
+  J --> L[planned_followup merken<br/>Idempotenz pro TEST_ID]
+```
+
+### Lebenszyklus einer Wartungsmaßnahme (State Machine)
+
+```mermaid
+stateDiagram-v2
+  [*] --> Geplant_Samedis: Wartung in Samedis angelegt<br/>due_on + Intervall
+  Geplant_Samedis --> Geplant_Actimed: Download → A3_IS_ACT_DEV
+  Geplant_Actimed --> Durchgeführt: Techniker prüft in Actimed<br/>→ A3_FINISHED_TEST
+  Durchgeführt --> Abgeschlossen: Upload PUT status=done<br/>+ Anhang PNG/PDF
+  Abgeschlossen --> Geplant_Samedis: optional Folgemaßnahme<br/>due_on = Prüfdatum + Intervall
+  Abgeschlossen --> [*]
+```
+
+## Was der Sync automatisch entscheidet
+
+Über das Mapping hinaus gibt es vier Automatiken, die alle über Schalter im
+Reiter **Einstellungen** (bzw. `sync.*` in der `config.yml`) gesteuert werden.
+
+### Tenant-ID-Validierung
+
+Vor jedem Lauf prüft der Sync die `samedis_tenant_id` jedes aktiven Mandanten.
+Ist sie leer, enthält Platzhalterzeichen (z. B. der Beispielwert `<...>`) oder
+ist keine 24-stellige Samedis-ObjectId, wird **dieser Mandant übersprungen** und
+im Reiter „Letzte Meldungen" genau einmal gemeldet — die übrigen Mandanten
+laufen normal weiter. Das verhindert kryptische Pfad-Fehler beim Ablegen von
+Scratch-/State-Dateien.
+
+### Intervall-Übertragung (beide Richtungen)
+
+Actimed führt das Prüfintervall in **Monaten** (`A3_ACTIVITY.ACTIVITY_INTERVAL`),
+Samedis als **Betrag + Einheit** (`with_service_intervals[].value/unit` mit
+`day | week | month | year`). Der Sync rechnet automatisch um:
+
+- **Download**: das Samedis-Intervall wird in Monate umgerechnet
+  (`year`×12, `month`×1, `week`/`day` gerundet auf ganze Monate, min. 1) und
+  **beim Anlegen** einer neuen Tätigkeit als `ACTIVITY_INTERVAL` gesetzt.
+  Bestehende Tätigkeiten werden nicht überschrieben.
+- **Upload**: das Intervall wird primär aus `A3_ACTIVITY.ACTIVITY_INTERVAL` der
+  zugehörigen Tätigkeit gelesen (über die `issue_link`-Brücke), ersatzweise aus
+  `NEXT_TEST_DATE − TEST_DATE` abgeleitet, und als `with_service_intervals`
+  (Einheit `month`) mitgesendet. Ohne das legt Samedis die Wartungsart mit
+  „Intervall Unbekannt" an.
+
+### Tätigkeiten in Actimed automatisch anlegen
+
+`sync.create_activities_from_mapping` (Default **aus**). Fehlt für eine gemappte
+Tätigkeitsart jede Tätigkeit, legt der Sync sie selbst an — **aber nur**, wenn im
+Mapping eine gültige Prüfvorschrift steht (`Test Spec Name` bzw.
+`actimed_test_spec_name`/`actimed_test_spec_id`). Ohne gültige Prüfvorschrift
+wird **nichts** angelegt (kein `TEST_SPEC=1`/„Unbekannt"), das Issue bleibt offen
+mit klarer Meldung. Hintergrund: es gibt in Actimed **keine** automatische
+Zuordnung „Wartungsart → Prüfvorschrift" — die richtige `TEST_SPEC` hängt von der
+elektrischen Geräteklasse ab (SKI/SKII × B/BF/CF …).
+
+### Geplante Folgemaßnahme nach Abschluss anlegen
+
+`sync.create_planned_issue_after_completion` (Default **aus**). Nach dem
+erfolgreichen Abschluss einer Prüfung (Upload) legt der Sync in Samedis die
+nächste geplante Maßnahme an: ein neues maintenance-Issue mit `status=_new` und
+`due_on = Prüfdatum + Intervall`. **Idempotent** pro abgeschlossenem Test (Tabelle
+`planned_followup` in der `state.sqlite`) — der 30-Sekunden-Poll und der
+Dual-Mode erzeugen also keine Duplikate.
+
+> **Achtung Doppelanlage**: Falls euer Samedis-Backend die Folgemaßnahme bei
+> `status=done` mit hinterlegtem Intervall selbst erzeugt, würde diese Option
+> zusätzliche (doppelte) Vorgänge anlegen. Beim ersten echten Upload prüfen, ob
+> genau **eine** Folgemaßnahme entsteht; wenn Samedis sie selbst anlegt, den
+> Schalter aus lassen.
+
 ## Datenmodell in Actimed (Crashkurs)
 
 Bevor man die Sync-Logik versteht, hilft ein kurzer Blick auf die
@@ -215,10 +335,11 @@ musst **nichts** mitkopieren — beim ersten Start legt die App selbst
    Regex auf Samedis-Service → Actimed-Tätigkeitsart → Actimed-Tätigkeit
    (Prüfvorschrift). Kommt mit sinnvollen Defaults für DGUV V3, MTK BDM,
    Defi/AED, allgemeine Inspektion. **Wichtig**: Damit der Techniker die
-   Prüfung in Actimed mit echten Schritten starten kann, muss pro Mapping-
-   Zeile ein `Activity Name` gesetzt sein, der auf eine in Actimed
-   gepflegte Tätigkeit mit Prüfvorschrift zeigt. Ausführliche Anleitung
-   im Abschnitt **„Wartungsart-Mapping einrichten"** unten.
+   Prüfung in Actimed mit echten Schritten starten kann, muss die Prüfvorschrift
+   verknüpft sein — entweder per `Activity Name` (Verweis auf eine vorhandene
+   Tätigkeit, empfohlen) **oder** per `Test Spec Name` zusammen mit
+   `create_activities_from_mapping`, damit der Sync die Tätigkeit selbst anlegt.
+   Ausführliche Anleitung im Abschnitt **„Wartungsart-Mapping einrichten"** unten.
 7. Beim ersten Start fragt die App außerdem, ob sie mit Windows automatisch
    gestartet werden soll — siehe „Autostart" unten.
 
@@ -280,6 +401,14 @@ attributes.services            ──Regex──►        z. B. "MPBe_§7_Wartu
 
 **Schritt 2 — In Actimed: Tätigkeit mit Prüfvorschrift anlegen**
 
+> **Zwei Wege ab hier.** *Variante A* (empfohlen, dieser Schritt): du legst die
+> Tätigkeit in Actimed an und referenzierst sie im Mapping über `Activity Name`.
+> *Variante B*: du überlässt das Anlegen dem Sync — dann brauchst du Schritt 2
+> **nicht**, setzt stattdessen `sync.create_activities_from_mapping = true` und im
+> Mapping das Feld `Test Spec Name` (die Prüfvorschrift). Variante B passt nur,
+> wenn die Geräte unter einer Wartungsart elektrisch gleichartig sind — sonst ist
+> A sauberer, weil die richtige `TEST_SPEC` von der Geräteklasse abhängt.
+
 In Actimed: *Stammdaten → Tätigkeiten*. Wenn die zur Tätigkeitsart
 passende Tätigkeit (mit deiner Prüfvorschrift) noch fehlt, jetzt
 anlegen:
@@ -321,25 +450,31 @@ Bezeichnung** ein eindeutiges Stichwort steht, das der Regex matcht. Beispiele:
 
 Hauptfenster → Tab **„Wartungsart-Mapping"**. Pro Wartungsart eine Zeile:
 
-| Match (Regex) | Actimed Kind | Activity Name (Pruefvorschrift) |
-| --- | --- | --- |
-| `(?i)dguv\s*v?3\|stk.*§\s*11` | `MPBe_§11_STK/DGUV V3` | `MPBe_STK_HF_emed-100-014` |
-| `(?i)mtk.*bdm\|blutdruck` | `MPBe_MTK_BDM` | `MPBe_Prüfung_MTK_BDM` |
-| `(?i)defi.*aed` | `MPBe_STK Defi (AED)` | `MPBe_STK_Defi_AED_DP-300` |
-| `(?i)wartung\|inspektion` | `MPBe_§7_Wartung/Inspektion` | `MPBe_§7_Wartung_Standard` |
-| (leer = Fallback) | `MPBe_§7_Wartung/Inspektion` | `MPBe_§7_Wartung_Standard` |
+| Match (Regex) | Actimed Kind | Activity Name (vorhandene Tätigkeit) | Test Spec Name (für Auto-Anlegen) |
+| --- | --- | --- | --- |
+| `(?i)dguv\s*v?3\|stk.*§\s*11` | `MPBe_§11_STK/DGUV V3` | `MPBe_STK_HF_emed-100-014` | *(oder statt Activity Name:)* `EN50699_0702_SKI_ErsatzMessung_allg_Grenzwerte` |
+| `(?i)mtk.*bdm\|blutdruck` | `MPBe_MTK_BDM` | `MPBe_Prüfung_MTK_BDM` | |
+| `(?i)defi.*aed` | `MPBe_STK Defi (AED)` | `MPBe_STK_Defi_AED_DP-300` | |
+| `(?i)wartung\|inspektion` | `MPBe_§7_Wartung/Inspektion` | `MPBe_§7_Wartung_Standard` | |
+| (leer = Fallback) | `MPBe_§7_Wartung/Inspektion` | `MPBe_§7_Wartung_Standard` | |
 
 - **Match (Regex)**: erste passende Zeile gewinnt. Leer = Default-Fallback.
   Case-insensitive (`(?i)` als Prefix).
 - **Actimed Kind**: muss exakt einem `KIND_NAME` aus
   `A3_ACTIVITY_KIND` entsprechen.
-- **Activity Name**: optional aber **dringend empfohlen**. Muss exakt einem
-  `ACTIVITY_NAME` aus `A3_ACTIVITY` entsprechen. Ohne diesen Eintrag
-  legt der Sync entweder eine vorhandene Tätigkeit zur Tätigkeitsart
-  willkürlich aus, oder, wenn keine existiert, **skipt das Issue**
-  mit einer Fehlermeldung im Tab „Letzte Meldungen". Vorher hatte er
-  notdürftig eine Tätigkeit mit Prüfvorschrift „Unbekannt" angelegt —
-  das machen wir bewusst nicht mehr, weil das nur das Problem verschleiert.
+- **Activity Name** *(Variante A)*: optional aber **dringend empfohlen**. Muss
+  exakt einem `ACTIVITY_NAME` aus `A3_ACTIVITY` entsprechen — die vorhandene
+  Tätigkeit mit ihrer Prüfvorschrift wird wiederverwendet.
+- **Test Spec Name** *(Variante B)*: nur wirksam, wenn
+  `sync.create_activities_from_mapping = true` **und** für die Tätigkeitsart noch
+  keine Tätigkeit existiert. Muss exakt einem `TEST_SPEC.NAME` entsprechen; der
+  Sync legt dann die Tätigkeit selbst an (Intervall aus dem Samedis-Issue, sonst
+  `actimed_activity_interval_months`, sonst 12). `TEST_SPEC=1`/„Unbekannt" wird
+  abgelehnt.
+- Ist **keine** der beiden Varianten nutzbar und existiert auch sonst keine
+  Tätigkeit zur Tätigkeitsart, **skipt** der Sync das Issue mit einer
+  Fehlermeldung im Tab „Letzte Meldungen". Eine Stub-Tätigkeit mit Prüfvorschrift
+  „Unbekannt" wird bewusst **nicht** mehr angelegt.
 
 Nach Edit: **„Speichern"** klicken. Der Sync-Worker übernimmt die neuen
 Regeln beim nächsten Tick (max. `download_interval_minutes` warten,
@@ -477,8 +612,9 @@ der nächste Schreibversuch fängt den Lock erneut ab.
 
 ## Lizenz / Urheber
 
+Dieses Projekt steht unter der **MIT-Lizenz** — siehe [LICENSE](LICENSE).
+
 Teile von `Core/Api/` (Authenticate, RequestData, FilterBuilder-Pattern,
 Tenant-Settings) sind eng angelehnt an das öffentliche
 [samedis-care-external-sync](https://github.com/Samedis-care/samedis-care-external-sync)
-(MIT). Eigene Anpassungen für Multi-Tenant- und Actimed-Schreibpfad sind unter
-derselben Lizenz vorgesehen.
+(ebenfalls MIT).

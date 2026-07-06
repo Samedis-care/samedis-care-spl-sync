@@ -311,6 +311,19 @@ public class OleDbActimedRepository : IActimedRepository, IMaintenanceCapable
             : null;
     }
 
+    public ActimedActivity? GetActivityById(int activityId)
+    {
+        const string sql = "SELECT TOP 1 ACTIVITY_ID, TEST_SPEC_ID, KIND_ID, ACTIVITY_INTERVAL, ACTIVITY_NAME FROM A3_ACTIVITY WHERE ACTIVITY_ID = ?;";
+        using var conn = Open();
+        using var cmd = new OleDbCommand(sql, conn);
+        cmd.Parameters.Add(BuildParam("ACTIVITY_ID", activityId));
+        using var rdr = cmd.ExecuteReader();
+        return rdr.Read()
+            ? new ActimedActivity(GetInt(rdr, "ACTIVITY_ID"), GetInt(rdr, "TEST_SPEC_ID"), GetInt(rdr, "KIND_ID"),
+                GetInt(rdr, "ACTIVITY_INTERVAL"), GetString(rdr, "ACTIVITY_NAME"))
+            : null;
+    }
+
     public ActimedActivity? FindActivityByName(string activityName)
     {
         if (string.IsNullOrWhiteSpace(activityName)) return null;
@@ -322,6 +335,31 @@ public class OleDbActimedRepository : IActimedRepository, IMaintenanceCapable
         return rdr.Read()
             ? new ActimedActivity(GetInt(rdr, "ACTIVITY_ID"), GetInt(rdr, "TEST_SPEC_ID"), GetInt(rdr, "KIND_ID"),
                 GetInt(rdr, "ACTIVITY_INTERVAL"), GetString(rdr, "ACTIVITY_NAME"))
+            : null;
+    }
+
+    public ActimedTestSpec? FindTestSpecByName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        const string sql = "SELECT TOP 1 TEST_SPEC_ID, NAME FROM TEST_SPEC WHERE NAME = ?;";
+        using var conn = Open();
+        using var cmd = new OleDbCommand(sql, conn);
+        cmd.Parameters.Add(MakeStringParam(name));
+        using var rdr = cmd.ExecuteReader();
+        return rdr.Read()
+            ? new ActimedTestSpec(GetInt(rdr, "TEST_SPEC_ID"), GetString(rdr, "NAME"))
+            : null;
+    }
+
+    public ActimedTestSpec? GetTestSpecById(int testSpecId)
+    {
+        const string sql = "SELECT TOP 1 TEST_SPEC_ID, NAME FROM TEST_SPEC WHERE TEST_SPEC_ID = ?;";
+        using var conn = Open();
+        using var cmd = new OleDbCommand(sql, conn);
+        cmd.Parameters.Add(BuildParam("TEST_SPEC_ID", testSpecId));
+        using var rdr = cmd.ExecuteReader();
+        return rdr.Read()
+            ? new ActimedTestSpec(GetInt(rdr, "TEST_SPEC_ID"), GetString(rdr, "NAME"))
             : null;
     }
 
@@ -380,7 +418,9 @@ public class OleDbActimedRepository : IActimedRepository, IMaintenanceCapable
             ("TEST_SPEC_ID", activity.TestSpecId),
             ("KIND_ID", activity.KindId),
             ("ACTIVITY_INTERVAL", activity.IntervalMonths),
-            ("ACTIVITY_NAME", activity.Name)
+            ("ACTIVITY_NAME", activity.Name),
+            ("MODIFYTIME", DateTime.Now),  // OleDb konvertiert nach OA-Date
+            ("MODIFYTYPE", 1)              // 1 = neu eingefügt (wie die von Hand angelegten Zeilen)
         });
 
     public bool RepairDeviceForeignKeys(int devId)

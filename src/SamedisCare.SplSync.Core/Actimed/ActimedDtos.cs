@@ -66,6 +66,19 @@ public record ActimedActivity(
     int IntervalMonths,
     string Name);
 
+/// <summary>
+/// One TEST_SPEC row (= Prüfvorschrift / "recipe"). TEST_SPEC_ID=1 is the built-in
+/// "Unbekannt" placeholder — an activity pointing at it has no test steps and opens an
+/// empty check dialog in Actimed, so the sync never creates activities with that id.
+/// </summary>
+public record ActimedTestSpec(
+    int TestSpecId,
+    string Name)
+{
+    public const int UnknownId = 1;
+    public bool IsUnknown => TestSpecId == UnknownId;
+}
+
 /// <summary>One A3_IS_ACT_DEV row (= scheduled check assignment for one device).</summary>
 public record ActimedIsActDev(
     int DevId,

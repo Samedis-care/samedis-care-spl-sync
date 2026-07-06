@@ -57,6 +57,23 @@ public partial class App : Application
                 MessageBoxImage.Warning);
         };
 
+        // Schreibtest auf den EXE-Ordner: dort landen config.yml, logs\, state\, scratch\.
+        // Fängt ein Deployment in einen schreibgeschützten Ort ab (typisch C:\Program Files\),
+        // bevor kryptische Folgefehler beim Config-/State-Schreiben auftreten.
+        if (!AppPaths.IsBaseDirWritable(out var writeError))
+        {
+            MessageBox.Show(
+                "Der Programmordner ist nicht beschreibbar:\n" +
+                $"  {AppPaths.BaseDir}\n\n" +
+                "SamedisCare SplSync legt hier config.yml sowie die Ordner logs\\, state\\ und " +
+                "scratch\\ an. Bitte den Programmordner an einen beschreibbaren Ort verschieben " +
+                "(z. B. C:\\spl-sync\\) und NICHT unter C:\\Program Files\\ betreiben.\n\n" +
+                $"Details: {writeError}",
+                "SamedisCare SplSync — Programmordner schreibgeschützt",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+
         var configPath = ResolveConfigPath(e.Args);
 
         // First-Run-Bootstrap: wenn config.yml fehlt, aus eingebetteter Resource erzeugen.

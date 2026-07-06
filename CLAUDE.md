@@ -694,11 +694,10 @@ zusätzlich:
 
 ### 5.8 Inkrementeller Cursor
 
-- Pro Mandant zwei Dateien unter
-  `%PROGRAMDATA%\SamedisCare\SplSync\state\<tenant_id>\`:
-  - `lastrun_download.txt` — letzter Download-Zeitpunkt.
-  - `lastrun_upload.txt` — letzter Upload-Zeitpunkt.
-- Fallback bei fehlender/kaputter Datei: `2022-01-01T00:00:00.000+01:00`.
+- Cursor pro Mandant + Richtung (`download`/`upload`) in der Tabelle
+  `sync_cursor` der State-DB unter `<exe-ordner>\state\state.sqlite`
+  (EXE-relativ, nicht mehr `%PROGRAMDATA%` — siehe `AppPaths`).
+- Fallback bei fehlendem Cursor: `2022-01-01T00:00:00.000+01:00`.
 - Cursor-Quelle für Upload: `MAX(MODIFYTIME)` der `A3_FINISHED_TEST`-Zeilen,
   die in diesem Lauf hochgeladen wurden — als OLE-Auto-Date, vor dem Schreiben
   in ISO konvertieren.
@@ -941,6 +940,8 @@ Auslieferungs-Anmerkung in Kap. 1.
 - **Kontextmenü**: „Jetzt synchronisieren", „Letzten Lauf öffnen",
   „Konfiguration", „Logs öffnen", „Beenden".
 - **Push-Dialoge** (Toast-Notification + ggf. Modal-Window) bei:
+  - Programmordner nicht beschreibbar (Schreibtest beim Start, `AppPaths.IsBaseDirWritable`)
+    → Hinweis, die EXE an einen beschreibbaren Ort zu verschieben (nicht `C:\Program Files\`).
   - Token abgelaufen / Anmeldung fehlgeschlagen → Re-Login-Dialog.
   - ACE-OLEDB-Treiber fehlt → Hinweis mit Download-Link.
   - Inventar in Samedis vorhanden, in Actimed fehlt und Auto-Anlegen ist aus.
@@ -1015,7 +1016,7 @@ maintenance_kind_mapping:
 logging:
   level: 1     # 0 off, 1 info, 2 debug
   mode: 3      # 0 none, 1 console, 2 file, 3 console+file
-  directory: "%PROGRAMDATA%\\SamedisCare\\SplSync\\logs"
+  directory: "logs"   # relativer Pfad = relativ zum EXE-Ordner (wie state\ und scratch\)
 
 http:
   valid_certificate: true
@@ -1061,8 +1062,10 @@ dotnet publish src/SamedisCare.SplSync.Tray -c Release -r win-x64 \
 ```
 
 → Ergebnis: eine EXE `SamedisCare.SplSync.Tray.exe`. Sie ist die einzige
-Auslieferung. State-DB (`state.sqlite`) und Logs liegen unter
-`%PROGRAMDATA%\SamedisCare\SplSync\`. Cross-Compile von macOS aus funktioniert.
+Auslieferung. `config.yml`, Logs (`logs\`), State-DB (`state\state.sqlite`) und
+Scratch-Cache (`scratch\<tenant_id>\`) liegen **relativ zum EXE-Ordner**
+(zentral in `AppPaths`; der Ordner muss beschreibbar sein, z. B. `C:\spl-sync\`).
+Cross-Compile von macOS aus funktioniert.
 
 Für die Auto-Start-Erfahrung: `Tray.exe` einmal manuell starten und dann in
 der Windows-Aufgabenplanung oder im Autostart-Ordner verlinken — der

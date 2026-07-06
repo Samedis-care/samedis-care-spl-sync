@@ -30,6 +30,15 @@ public class Issues
         [JsonProperty("done_at")] public string? DoneAt { get; set; }
         [JsonProperty("due_on")] public string? DueOn { get; set; }
 
+        /// <summary>
+        /// (nur bei issue_type=maintenance) Die zum Zeitpunkt der Vorgangs-Erstellung aus dem
+        /// Inventar gecachten Service-Intervalle. Betrag (<see cref="ServiceInterval.Value"/>) plus
+        /// Einheit (<see cref="ServiceInterval.Unit"/>: day/week/month/year, Default month). Wird
+        /// über IntervalConversion in Monate umgerechnet, weil Actimed ACTIVITY_INTERVAL nur in
+        /// Monaten führt. Quelle: samedis-public.yaml, Schema with_service_intervals.
+        /// </summary>
+        [JsonProperty("with_service_intervals")] public List<ServiceInterval>? WithServiceIntervals { get; set; }
+
         [JsonProperty("maintenance_type")] public string? MaintenanceType { get; set; }
         [JsonProperty("maintenance_performer")] public string? MaintenancePerformer { get; set; }
         [JsonProperty("maintenance_passed")] public bool? MaintenancePassed { get; set; }
@@ -45,6 +54,26 @@ public class Issues
 
         [JsonProperty("created_at")] public string? CreatedAt { get; set; }
         [JsonProperty("updated_at")] public string? UpdatedAt { get; set; }
+    }
+
+    /// <summary>
+    /// Ein Eintrag aus with_service_intervals (Schema in samedis-public.yaml). Ein Vorgang kann
+    /// mehrere haben (z. B. maintenance + inspection); die Auswahl des passenden Eintrags macht
+    /// der DownloadEngine (bevorzugt category=maintenance, Feinabgleich über label/services).
+    /// </summary>
+    public class ServiceInterval
+    {
+        /// <summary>Kategorie des Intervalls: "maintenance" oder "inspection".</summary>
+        [JsonProperty("category")] public string? Category { get; set; }
+
+        /// <summary>Label zur Identifikation (Sprache des Haupt-Mandanten), z. B. "STK".</summary>
+        [JsonProperty("label")] public string? Label { get; set; }
+
+        /// <summary>Anzahl der Einheiten.</summary>
+        [JsonProperty("value")] public int? Value { get; set; }
+
+        /// <summary>Einheit: day | week | month | year (Default month).</summary>
+        [JsonProperty("unit")] public string? Unit { get; set; }
     }
 
     public class Data

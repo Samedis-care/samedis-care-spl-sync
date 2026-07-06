@@ -63,25 +63,46 @@ sync:
   create_inventories_from_actimed: false
   set_inventory_operation_status_on_failed_maintenance: false
 
+  # Erlaubt dem Sync, eine fehlende A3_ACTIVITY (Tätigkeit) selbst anzulegen, wenn für die
+  # gemappte Tätigkeitsart (KIND) noch keine existiert. Voraussetzung: der passende
+  # maintenance_kind_mapping-Eintrag gibt eine Prüfvorschrift an (actimed_test_spec_name
+  # oder actimed_test_spec_id). Fehlt eine gültige Prüfvorschrift, wird NICHTS angelegt
+  # (kein TEST_SPEC=1/"Unbekannt") — das Issue bleibt offen mit klarer Meldung.
+  create_activities_from_mapping: false
+
+  # Legt nach Abschluss einer Prüfung (Upload) automatisch die geplante Folgemaßnahme in Samedis
+  # an: neues maintenance-Issue mit due_on = Prüfdatum + Intervall (Monate). Idempotent pro Test.
+  create_planned_issue_after_completion: false
+
 # Wartungsart-Mapping: regex auf Samedis-Wartungstyp/Titel/Services -> Actimed-Tätigkeit.
 #
 # Pflicht-Felder:
 #   actimed_kind   — Name der A3_ACTIVITY_KIND (Tätigkeitsart) in Actimed.
 #                    Muss exakt uebereinstimmen, inkl. Sonderzeichen wie '§'.
 #
-# Optional aber DRINGEND empfohlen:
-#   actimed_activity_name — Name der konkreten A3_ACTIVITY (Tätigkeit) mit hinterlegter
-#                           Pruefvorschrift. Ohne dieses Feld legt der Sync notfalls eine
-#                           Tätigkeit mit TEST_SPEC_ID=1 (=Unbekannt) an — der Techniker
-#                           sieht dann beim Start der Pruefung in Actimed eine LEERE
-#                           Schrittliste, weil keine Pruefvorschrift verknuepft ist.
+# Prüfvorschrift-Verknüpfung (eine der beiden Varianten pro Eintrag):
+#   A) actimed_activity_name — Name einer BEREITS in Actimed vorhandenen A3_ACTIVITY
+#      (Tätigkeit) mit hinterlegter Prüfvorschrift. Wird bevorzugt wiederverwendet.
+#   B) actimed_test_spec_name / actimed_test_spec_id — Name bzw. ID der TEST_SPEC
+#      (Prüfvorschrift). Nur wirksam, wenn create_activities_from_mapping=true UND für die
+#      KIND noch keine Tätigkeit existiert: dann legt der Sync die Tätigkeit mit dieser
+#      Prüfvorschrift an. TEST_SPEC=1 ("Unbekannt") wird abgelehnt.
+#      actimed_activity_interval_months — Fallback-Prüfintervall der neuen Tätigkeit, falls die
+#      Samedis-Maßnahme kein Intervall liefert (Samedis-Wert hat Vorrang; Default 12). Wirkt nur
+#      beim erstmaligen Anlegen — existierende Tätigkeiten werden nicht überschrieben.
 #
-# Beispiele unten zeigen pro Wartungsart sowohl den KIND_NAME als auch den ACTIVITY_NAME,
-# wie sie in der Actimed-DB des Pilot-Kunden vorhanden sind. Anpassen!
+# Achtung: Es gibt in Actimed KEINE automatische Zuordnung "Wartungsart -> Prüfvorschrift".
+# Die richtige TEST_SPEC hängt von der elektrischen Geräteklasse ab (SKI/SKII x B/BF/CF ...).
+# Wenn die Geräte unter einer Wartungsart elektrisch unterschiedlich sind, ist Variante A
+# (je Tätigkeit eine passende Vorschrift, in Actimed gepflegt) sauberer als Variante B.
 maintenance_kind_mapping:
   - match: "(?i)dguv\\s*v?3|stk.*§\\s*11"
     actimed_kind: "MPBe_§11_STK/DGUV V3"
-    # actimed_activity_name: "MPBe_§11_STK_DGUV_V3_Standard"   # auf eure Vorschrift anpassen
+    # Variante A (existierende Tätigkeit wiederverwenden):
+    # actimed_activity_name: "MPBe_§11_STK_DGUV_V3_Standard"
+    # Variante B (Tätigkeit automatisch anlegen, benötigt create_activities_from_mapping: true):
+    # actimed_test_spec_name: "EN50699_0702_SKI_ErsatzMessung_allg_Grenzwerte"
+    # actimed_activity_interval_months: 24
 
   - match: "(?i)mtk.*bdm|blutdruck"
     actimed_kind: "MPBe_MTK_BDM"
@@ -101,7 +122,8 @@ maintenance_kind_mapping:
 logging:
   level: 1     # 0 off, 1 info, 2 debug
   mode: 3      # 0 none, 1 console, 2 file, 3 console+file
-  directory: "%PROGRAMDATA%\\SamedisCare\\SplSync\\logs"
+  # Relativer Pfad wird relativ zum EXE-Ordner aufgelöst (wie state\ und scratch\).
+  directory: "logs"
 
 http:
   valid_certificate: true

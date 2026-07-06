@@ -253,6 +253,19 @@ public class SqliteActimedRepository : IActimedRepository
             : null;
     }
 
+    public ActimedActivity? GetActivityById(int activityId)
+    {
+        const string sql = "SELECT activity_id, test_spec_id, kind_id, activity_interval, activity_name FROM a3_activity WHERE activity_id = $id LIMIT 1;";
+        using var conn = Open();
+        using var cmd = new SqliteCommand(sql, conn);
+        cmd.Parameters.AddWithValue("$id", activityId);
+        using var rdr = cmd.ExecuteReader();
+        return rdr.Read()
+            ? new ActimedActivity(GetInt(rdr, "activity_id"), GetInt(rdr, "test_spec_id"), GetInt(rdr, "kind_id"),
+                GetInt(rdr, "activity_interval"), GetString(rdr, "activity_name"))
+            : null;
+    }
+
     public ActimedActivity? FindActivityByName(string activityName)
     {
         if (string.IsNullOrWhiteSpace(activityName)) return null;
@@ -264,6 +277,31 @@ public class SqliteActimedRepository : IActimedRepository
         return rdr.Read()
             ? new ActimedActivity(GetInt(rdr, "activity_id"), GetInt(rdr, "test_spec_id"), GetInt(rdr, "kind_id"),
                 GetInt(rdr, "activity_interval"), GetString(rdr, "activity_name"))
+            : null;
+    }
+
+    public ActimedTestSpec? FindTestSpecByName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        const string sql = "SELECT test_spec_id, name FROM test_spec WHERE TRIM(name) = $n LIMIT 1;";
+        using var conn = Open();
+        using var cmd = new SqliteCommand(sql, conn);
+        cmd.Parameters.AddWithValue("$n", name.Trim());
+        using var rdr = cmd.ExecuteReader();
+        return rdr.Read()
+            ? new ActimedTestSpec(GetInt(rdr, "test_spec_id"), GetString(rdr, "name"))
+            : null;
+    }
+
+    public ActimedTestSpec? GetTestSpecById(int testSpecId)
+    {
+        const string sql = "SELECT test_spec_id, name FROM test_spec WHERE test_spec_id = $id LIMIT 1;";
+        using var conn = Open();
+        using var cmd = new SqliteCommand(sql, conn);
+        cmd.Parameters.AddWithValue("$id", testSpecId);
+        using var rdr = cmd.ExecuteReader();
+        return rdr.Read()
+            ? new ActimedTestSpec(GetInt(rdr, "test_spec_id"), GetString(rdr, "name"))
             : null;
     }
 

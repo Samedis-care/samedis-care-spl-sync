@@ -27,4 +27,26 @@ public class MaintenanceKindMapperTests
         var mapper = Default();
         mapper.Map(mtype, title, null).Should().Be(expected);
     }
+
+    [Fact]
+    public void Resolve_carries_test_spec_and_interval_for_auto_create()
+    {
+        var mapper = new MaintenanceKindMapper(new[]
+        {
+            new MaintenanceKindMappingEntry
+            {
+                Match = "(?i)dguv",
+                ActimedKind = "MPBe_§11_STK/DGUV V3",
+                ActimedTestSpecName = "EN50699_0702_SKI_ErsatzMessung_allg_Grenzwerte",
+                ActimedActivityIntervalMonths = 24
+            }
+        });
+
+        var match = mapper.Resolve(null, "STK nach DGUV V3", null);
+
+        match.ActimedKind.Should().Be("MPBe_§11_STK/DGUV V3");
+        match.ActimedTestSpecName.Should().Be("EN50699_0702_SKI_ErsatzMessung_allg_Grenzwerte");
+        match.IntervalMonths.Should().Be(24);
+        match.ActimedActivityName.Should().BeNull();
+    }
 }

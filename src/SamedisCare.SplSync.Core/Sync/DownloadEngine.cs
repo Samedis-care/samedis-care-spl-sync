@@ -333,22 +333,14 @@ public class DownloadEngine
         else
         {
             // Kein actimed_activity_name im Mapping — fallback: existierende Tätigkeit per
-            // KIND_ID suchen. Wenn keine existiert UND TEST_SPEC_ID=1 (=Unbekannt) waere, legen
-            // wir KEINE Stub-Tätigkeit an, sondern werfen eine UnmappedKindException. Das war
-            // frueher das stille "Prüfvorschrift: Unbekannt"-Verhalten — schwer zu erkennen, weil
-            // der Eintrag in Actimed sichtbar war, aber beim Start der Pruefung leer blieb.
-            // Jetzt skipt der Sync das Issue offen und der User sieht, was er konfigurieren muss.
+            // KIND_ID suchen und wiederverwenden.
             activity = _ctx.Actimed.FindActivityByKindId(kind.KindId);
             if (activity == null)
             {
-                throw new UnmappedKindException(
-                    $"Issue {issue.Id} (inventar={inventoryDeviceNumber}): " +
-                    $"Keine A3_ACTIVITY (Tätigkeit) für KIND_NAME='{kindName}' in Actimed vorhanden " +
-                    $"und im Mapping ist kein 'actimed_activity_name' gesetzt. " +
-                    $"ENTWEDER in Actimed eine Tätigkeit zu dieser Tätigkeitsart anlegen (mit Prüfvorschrift), " +
-                    $"ODER im Wartungsart-Mapping (Tab 'Wartungsart-Mapping') das Feld 'Activity Name' " +
-                    $"auf eine existierende Tätigkeit setzen — sonst hätte die Tätigkeit in Actimed " +
-                    $"keine Prüfvorschrift hinterlegt (TEST_SPEC=Unbekannt, Pruefdialog leer).");
+                // Fehlt die Tätigkeit ganz: nur dann selbst anlegen, wenn der User es erlaubt UND
+                // die Prüfvorschrift explizit im Mapping steht. Sonst weiter mit klarer Meldung
+                // abbrechen (eine Stub-Tätigkeit mit TEST_SPEC=1 wäre wertlos).
+                activity = TryCreateActivity(issue, inventoryDeviceNumber, kind, match);
             }
         }
 
@@ -374,10 +366,114 @@ public class DownloadEngine
         return inserted;
     }
 
+    /// <summary>
+    /// Wählt aus with_service_intervals[] den für diesen Vorgang passenden Eintrag: bevorzugt
+    /// category=maintenance; bei mehreren Kandidaten Feinabgleich über das Label gegen
+    /// services/title des Issues; sonst der erste maintenance-Eintrag (bzw. der erste überhaupt).
+    /// Liefert null, wenn keine Intervalle vorhanden sind.
+    /// </summary>
+    public static Issues.ServiceInterval? PickServiceInterval(
+        List<Issues.ServiceInterval>? all, IEnumerable<string>? services, string? title)
+    {
+        if (all == null || all.Count == 0) return null;
+
+        var pool = all.Where(x => string.Equals(x.Category, "maintenance", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (pool.Count == 0) pool = all;
+
+        if (pool.Count > 1)
+        {
+            var haystack = string.Join(" | ",
+                new[] { title }.Concat(services ?? Enumerable.Empty<string>())
+                .Where(s => !string.IsNullOrWhiteSpace(s))!).ToLowerInvariant();
+            if (haystack.Length > 0)
+            {
+                var byLabel = pool.FirstOrDefault(x =>
+                    !string.IsNullOrWhiteSpace(x.Label) && haystack.Contains(x.Label!.Trim().ToLowerInvariant()));
+                if (byLabel != null) return byLabel;
+            }
+        }
+
+        return pool[0];
+    }
+
     private static DateTime? ParseDate(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
         return DateTime.TryParse(raw, out var dt) ? dt : null;
+    }
+
+    /// <summary>
+    /// Legt eine fehlende A3_ACTIVITY (Tätigkeit) für die gemappte Tätigkeitsart an — aber nur,
+    /// wenn sync.create_activities_from_mapping=true ist UND der Mapping-Eintrag eine gültige
+    /// Prüfvorschrift (TEST_SPEC) angibt (per Name oder ID, niemals "Unbekannt"/ID 1). In allen
+    /// anderen Fällen wird eine UnmappedKindException mit konkreter Handlungsanweisung geworfen,
+    /// damit das Issue offen bleibt und der User sieht, was zu konfigurieren ist.
+    /// </summary>
+    private ActimedActivity TryCreateActivity(
+        Issues.Data issue, string? inventoryDeviceNumber, ActimedActivityKind kind, MaintenanceKindMatch match)
+    {
+        var kindName = kind.Name.Trim();
+
+        if (!_ctx.Config.Sync.CreateActivitiesFromMapping)
+        {
+            throw new UnmappedKindException(
+                $"Issue {issue.Id} (inventar={inventoryDeviceNumber}): " +
+                $"Keine A3_ACTIVITY (Tätigkeit) für KIND_NAME='{kindName}' in Actimed vorhanden " +
+                $"und im Mapping ist kein 'actimed_activity_name' gesetzt. " +
+                $"ENTWEDER in Actimed eine Tätigkeit zu dieser Tätigkeitsart anlegen (mit Prüfvorschrift), " +
+                $"ODER im Wartungsart-Mapping (Tab 'Wartungsart-Mapping') das Feld 'Activity Name' " +
+                $"auf eine existierende Tätigkeit setzen, " +
+                $"ODER sync.create_activities_from_mapping aktivieren und im Mapping eine Prüfvorschrift " +
+                $"('actimed_test_spec_name') hinterlegen — sonst hätte die Tätigkeit in Actimed " +
+                $"keine Prüfvorschrift hinterlegt (TEST_SPEC=Unbekannt, Pruefdialog leer).");
+        }
+
+        // Prüfvorschrift auflösen: ID hat Vorrang vor Name.
+        ActimedTestSpec? spec = null;
+        if (match.ActimedTestSpecId is int specId)
+            spec = _ctx.Actimed.GetTestSpecById(specId);
+        else if (!string.IsNullOrWhiteSpace(match.ActimedTestSpecName))
+            spec = _ctx.Actimed.FindTestSpecByName(match.ActimedTestSpecName);
+
+        if (spec == null || spec.IsUnknown)
+        {
+            var wanted = match.ActimedTestSpecId is int id
+                ? $"actimed_test_spec_id={id}"
+                : $"actimed_test_spec_name='{match.ActimedTestSpecName}'";
+            throw new UnmappedKindException(
+                $"Issue {issue.Id} (inventar={inventoryDeviceNumber}): " +
+                $"Für KIND_NAME='{kindName}' existiert keine Tätigkeit und das automatische Anlegen ist " +
+                $"aktiv, aber die im Mapping angegebene Prüfvorschrift ({wanted}) wurde in TEST_SPEC " +
+                $"nicht gefunden oder ist 'Unbekannt' (ID 1). Bitte im Wartungsart-Mapping eine " +
+                $"existierende, gültige Prüfvorschrift eintragen.");
+        }
+
+        // Intervall-Quelle (nur beim Anlegen): Samedis-Wartungsmaßnahme > Mapping-Config > Default 12.
+        // Existierende Tätigkeiten fassen wir bewusst nicht an (Modellierung: "nur beim Anlegen setzen").
+        // Samedis liefert with_service_intervals[] mit Betrag + Einheit (day/week/month/year) —
+        // passenden Eintrag wählen und in Monate umrechnen (Actimed-Einheit).
+        var si = PickServiceInterval(issue.Attributes?.WithServiceIntervals, issue.Attributes?.Services, issue.Attributes?.Title);
+        var samedisMonths = IntervalConversion.ToMonths(si?.Value, si?.Unit);
+        int interval;
+        string intervalSource;
+        if (samedisMonths is int sm)                     { interval = sm; intervalSource = "Samedis"; }
+        else if (match.IntervalMonths is int m && m > 0) { interval = m;  intervalSource = "Mapping-Config"; }
+        else                                             { interval = 12; intervalSource = "Default"; }
+
+        var newId = _ctx.Actimed.InsertActivity(new ActimedActivity(
+            ActivityId: 0,          // wird vom Repository (MAX+1) vergeben
+            TestSpecId: spec.TestSpecId,
+            KindId: kind.KindId,
+            IntervalMonths: interval,
+            Name: kindName));
+
+        var rawInterval = si != null ? $"{si.Value?.ToString() ?? "null"} {si.Unit ?? ""} (category={si.Category ?? "-"})" : "kein with_service_intervals";
+        _ctx.Log.Info(
+            $"A3_ACTIVITY angelegt: ACTIVITY_ID={newId}, KIND_ID={kind.KindId} ('{kindName}'), " +
+            $"TEST_SPEC_ID={spec.TestSpecId} ('{spec.Name.Trim()}'), " +
+            $"Intervall={interval} Monate (Quelle: {intervalSource}, Samedis-Rohwert: {rawInterval}).");
+
+        return new ActimedActivity(newId, spec.TestSpecId, kind.KindId, interval, kindName);
     }
 
     /// <summary>
