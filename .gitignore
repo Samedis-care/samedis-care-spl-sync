@@ -39,3 +39,5 @@ config.yml
 Thumbs.db
 spl_data
 deploy
+# PowerPoint decks are managed outside the repo
+*.pptx
