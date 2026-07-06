@@ -5,6 +5,8 @@
     <AssemblyName>SamedisCare.SplSync.Core.Tests</AssemblyName>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Testprojekt nie veröffentlichen (sonst bricht ein Solution-weiter Single-File-Publish). -->
+    <IsPublishable>false</IsPublishable>
   </PropertyGroup>
 
   <ItemGroup>

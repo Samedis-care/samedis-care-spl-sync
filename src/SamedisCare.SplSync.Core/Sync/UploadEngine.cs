@@ -173,6 +173,92 @@ public class UploadEngine
 
         if (!string.IsNullOrEmpty(attachPdfPath))
             UploadActimedPdf(issueId, test, attachPdfPath!);
+
+        // Optional: geplante Folgemaßnahme in Samedis anlegen (Prüfdatum + Intervall).
+        if (_ctx.Config.Sync.CreatePlannedIssueAfterCompletion)
+            CreatePlannedFollowup(test);
+    }
+
+    /// <summary>
+    /// Legt nach Abschluss einer Prüfung die geplante Folgemaßnahme in Samedis an:
+    /// neues maintenance-Issue mit status=_new und due_on = Prüfdatum + Intervall (Monate).
+    /// Idempotent über <see cref="PlannedFollowupStore"/> (verhindert Duplikate beim 30-s-Polling
+    /// und im Dual-Mode). Ein Fehler hier wird nur geloggt, nicht geworfen — der eigentliche
+    /// Abschluss + Anhang soll dadurch nicht zurückgerollt werden.
+    /// </summary>
+    private void CreatePlannedFollowup(ActimedFinishedTest test)
+    {
+        var followups = new PlannedFollowupStore(_ctx.State);
+        if (followups.Exists(_ctx.Tenant.SamedisTenantId, test.TestId))
+            return; // schon angelegt
+
+        var months = ResolveIntervalMonths(test);
+        if (months is not int m || m <= 0)
+        {
+            _ctx.Log.Warn(
+                $"Folgemaßnahme für Test {test.TestId} übersprungen: kein Prüfintervall ermittelbar " +
+                $"(weder A3_ACTIVITY noch NEXT_TEST_DATE).");
+            return;
+        }
+
+        var dueOn = test.TestDate.AddMonths(m);
+
+        try
+        {
+            var attrs = BuildFollowupAttributes(test, dueOn, m);
+            var resource = $"{_ctx.TenantScope}/issues";
+            var response = _ctx.Samedis.Post(resource, Issues.BuildEnvelope(attrs));
+            if (_ctx.Samedis.StatusCode is < 200 or >= 300)
+            {
+                _ctx.Log.Warn(DownloadEngine.FormatHttpError("POST", resource, _ctx.Samedis.StatusCode, _ctx.Samedis.LastError, response));
+                return;
+            }
+
+            var newId = Helper.ExtractDataId(response);
+            followups.Record(_ctx.Tenant.SamedisTenantId, test.TestId, newId);
+            _ctx.Log.Info(
+                $"Geplante Folgemaßnahme angelegt: Issue {newId}, inventar={test.DevId}, " +
+                $"due_on={dueOn:yyyy-MM-dd} (Prüfdatum {test.TestDate:yyyy-MM-dd} + {m} Monate).");
+        }
+        catch (Exception ex)
+        {
+            _ctx.Log.Warn($"Folgemaßnahme für Test {test.TestId} fehlgeschlagen: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Payload für die geplante Folgemaßnahme (neues, offenes maintenance-Issue). Bewusst OHNE
+    /// external_id/done_at/test_result — die trägt erst die tatsächlich durchgeführte Prüfung.
+    /// </summary>
+    private Dictionary<string, object> BuildFollowupAttributes(ActimedFinishedTest test, DateTime dueOn, int months)
+    {
+        var device = _ctx.Actimed.GetDeviceById(test.DevId);
+        var inventoryDeviceNumber = device?.InventoryNo ?? "";
+        var title = string.IsNullOrWhiteSpace(test.PvsName) ? "Wartung/Pruefung" : test.PvsName!;
+
+        var dict = new Dictionary<string, object>
+        {
+            ["issue_type"]       = "maintenance",
+            ["task_type"]        = "maintenance",
+            ["maintenance_type"] = "maintenance",
+            ["status"]           = "_new",
+            ["title"]            = title,
+            ["services"]         = new[] { title },
+            ["due_on"]           = dueOn.ToString("yyyy-MM-dd"),
+            ["auto_create_test_protocol"] = false
+        };
+
+        if (!string.IsNullOrEmpty(inventoryDeviceNumber))
+        {
+            dict["inventory_device_number"] = inventoryDeviceNumber;
+            var invId = ResolveInventoryId(inventoryDeviceNumber);
+            if (!string.IsNullOrEmpty(invId)) dict["inventory_id"] = invId;
+        }
+
+        var intervals = BuildServiceIntervals(months, title);
+        if (intervals != null) dict["with_service_intervals"] = intervals;
+
+        return dict;
     }
 
     /// <summary>
@@ -257,6 +343,55 @@ public class UploadEngine
     /// </summary>
     private readonly Dictionary<string, string?> _inventoryIdCache = new();
 
+    /// <summary>
+    /// Baut das with_service_intervals-Array für den Upload (siehe samedis-public.yaml): ein Eintrag
+    /// mit category=maintenance, dem Service-Label und dem Prüfintervall in Monaten. Actimed führt
+    /// das Intervall nur in Monaten, daher unit="month". Liefert null, wenn kein Intervall bekannt
+    /// ist — dann überträgt der Upload kein Intervall (statt eine falsche 0 zu setzen).
+    /// </summary>
+    public static IReadOnlyList<Dictionary<string, object>>? BuildServiceIntervals(
+        int? months, string serviceLabel)
+    {
+        if (months is not int m || m <= 0) return null;
+
+        return new[]
+        {
+            new Dictionary<string, object>
+            {
+                ["category"] = "maintenance",
+                ["label"]    = serviceLabel,
+                ["value"]    = m,
+                ["unit"]     = "month",
+            }
+        };
+    }
+
+    /// <summary>
+    /// Ermittelt das Prüfintervall (Monate) für einen abgeschlossenen Test. Primär aus
+    /// A3_ACTIVITY.ACTIVITY_INTERVAL der zugehörigen Tätigkeit (über die issue_link-Brücke,
+    /// DEV_ID → ACTIVITY_ID) — dieser Wert stammt ursprünglich aus Samedis und ist zuverlässig.
+    /// Fallback: aus TEST_DATE → NEXT_TEST_DATE ableiten (nur wenn NEXT_TEST_DATE gesetzt ist).
+    /// Liefert null, wenn keine Quelle greift.
+    /// </summary>
+    private int? ResolveIntervalMonths(ActimedFinishedTest test)
+    {
+        var link = _ctx.IssueLinks.FindByDev(_ctx.Tenant.SamedisTenantId, test.DevId);
+        if (link is { ActimedActivityId: > 0 })
+        {
+            var activity = _ctx.Actimed.GetActivityById(link.ActimedActivityId);
+            if (activity is { IntervalMonths: > 0 })
+                return activity.IntervalMonths;
+        }
+
+        if (test.NextTestDate is DateTime next)
+        {
+            var months = IntervalConversion.MonthsBetween(test.TestDate, next);
+            if (months > 0) return months;
+        }
+
+        return null;
+    }
+
     private Dictionary<string, object> BuildAttributes(ActimedFinishedTest test)
     {
         var device = _ctx.Actimed.GetDeviceById(test.DevId);
@@ -310,6 +445,12 @@ public class UploadEngine
             dict["maintenance_passed"] = testResult == "passed" || testResult == "passed_conditionally";
         }
         if (!string.IsNullOrWhiteSpace(test.Memo)) dict["test_comment"] = test.Memo!;
+
+        // Prüfintervall aus Actimed mitliefern, sonst legt Samedis die Wartungsart ohne Intervall
+        // ("Unbekannt") an. Primär aus A3_ACTIVITY.ACTIVITY_INTERVAL (Samedis-Ursprung), sonst
+        // aus den Test-Daten abgeleitet.
+        var intervals = BuildServiceIntervals(ResolveIntervalMonths(test), title);
+        if (intervals != null) dict["with_service_intervals"] = intervals;
 
         // inventory_operation_status ist beim CREATE pflicht-required (Server-Validator).
         // Erlaubt: active | limited_use | out_of_order | retired | decommissioned.

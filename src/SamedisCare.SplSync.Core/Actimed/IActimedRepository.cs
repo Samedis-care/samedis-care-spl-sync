@@ -33,11 +33,27 @@ public interface IActimedRepository
     ActimedActivity? FindActivityByKindId(int kindId);
 
     /// <summary>
+    /// Liefert die A3_ACTIVITY per ID (u. a. für das Prüfintervall ACTIVITY_INTERVAL beim Upload),
+    /// oder null wenn keine existiert.
+    /// </summary>
+    ActimedActivity? GetActivityById(int activityId);
+
+    /// <summary>
     /// Sucht eine A3_ACTIVITY mit exaktem ACTIVITY_NAME-Match. Liefert null wenn keine existiert —
     /// der Caller (DownloadEngine) kann dann eine UnmappedKindException werfen, weil das ein
     /// Konfigurationsfehler ist (Mapping verweist auf nicht existente Tätigkeit).
     /// </summary>
     ActimedActivity? FindActivityByName(string activityName);
+
+    /// <summary>
+    /// Sucht eine TEST_SPEC (Prüfvorschrift) per exaktem Namen. Wird gebraucht, wenn der Sync
+    /// eine neue A3_ACTIVITY anlegen soll und das Wartungsart-Mapping die Prüfvorschrift per
+    /// Name referenziert. Liefert null, wenn keine passt.
+    /// </summary>
+    ActimedTestSpec? FindTestSpecByName(string name);
+
+    /// <summary>Liefert die TEST_SPEC per ID, oder null wenn keine existiert.</summary>
+    ActimedTestSpec? GetTestSpecById(int testSpecId);
 
     // ===== WRITE — for the Download pipeline =====
     // All write methods may throw ActimedLockedException if Actimed has the DB exclusively open.

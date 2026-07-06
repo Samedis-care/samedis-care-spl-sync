@@ -74,6 +74,15 @@ public class StateDb
                 UNIQUE(tenant_id, samedis_issue_id)
             );
 
+            CREATE TABLE IF NOT EXISTS planned_followup (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id           TEXT NOT NULL,
+                source_test_id      TEXT NOT NULL,     -- A3_FINISHED_TEST.TEST_ID der abgeschlossenen Prüfung
+                created_issue_id    TEXT,              -- in Samedis angelegte Folgemaßnahme
+                created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(tenant_id, source_test_id)
+            );
+
             CREATE TABLE IF NOT EXISTS sync_cursor (
                 tenant_id           TEXT NOT NULL,
                 kind                TEXT NOT NULL,    -- 'download' | 'upload'

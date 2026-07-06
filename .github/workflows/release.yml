@@ -1,0 +1,41 @@
+name: Release
+
+# Erstellt ein GitHub-Release mit der fertigen EXE, sobald ein Versions-Tag
+# gepusht wird (z. B. v1.0.0). So finden Nutzer die ausführbare EXE dauerhaft
+# unter "Releases" zum Download — nicht nur als flüchtiges Actions-Artifact.
+#
+#   git tag v1.0.0
+#   git push origin v1.0.0
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write   # nötig, um ein Release anzulegen
+
+jobs:
+  release:
+    name: Build & publish Release EXE
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # --zip erzeugt zusätzlich deploy.zip (EXE + config.yml.example + README.txt)
+      - name: Build deploy package + zip
+        run: bash build-deploy.sh --zip
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "SamedisCare SplSync ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            "deploy.zip#SamedisCare.SplSync ${GITHUB_REF_NAME} (Paket, .zip)" \
+            "deploy/SamedisCare.SplSync.Tray.exe#SamedisCare.SplSync.Tray.exe"

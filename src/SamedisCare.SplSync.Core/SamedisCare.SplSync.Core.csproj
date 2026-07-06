@@ -4,6 +4,11 @@
     <RootNamespace>SamedisCare.SplSync.Core</RootNamespace>
     <AssemblyName>SamedisCare.SplSync.Core</AssemblyName>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Library: kein eigenständiges Publish-Ziel. Ohne dies versucht ein Solution-weiter
+         `dotnet publish -p:PublishSingleFile=true` die DLL single-file zu veröffentlichen und
+         bricht mit NETSDK1099 ab (Single-File nur für ausführbare Anwendungen). Als
+         ProjectReference wird Core beim Tray-Publish trotzdem normal mitgeliefert. -->
+    <IsPublishable>false</IsPublishable>
   </PropertyGroup>
 
   <ItemGroup>

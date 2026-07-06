@@ -32,6 +32,11 @@ public class InProcessSyncHost
     private Task? _uploadLoop;
     private readonly List<PdfPickupWatcher> _pdfWatchers = new();
 
+    // Ungültige Mandanten (z. B. Platzhalter-Tenant-ID aus der Beispiel-Config) werden
+    // übersprungen. Damit der schnelle Upload-Poll-Loop die "Letzte Meldungen"-Liste nicht
+    // alle 30 s zumüllt, warnen wir pro Mandant nur einmal pro Prozess-Lebensdauer.
+    private readonly HashSet<string> _warnedInvalidTenants = new();
+
     public event Action<TrayStatus>? OnStatusChanged;
     public event Action? OnLockBlocked;
 
@@ -114,7 +119,7 @@ public class InProcessSyncHost
             var anyError = false;
             var anyWarn = false;
 
-            foreach (var tenant in cfg.Tenants.Where(t => t.Enabled))
+            foreach (var tenant in ValidEnabledTenants(cfg))
             {
                 if (token.IsCancellationRequested) break;
                 try
@@ -153,7 +158,7 @@ public class InProcessSyncHost
             }
 
             var stateDb = OpenStateDb();
-            foreach (var tenant in cfg.Tenants.Where(t => t.Enabled))
+            foreach (var tenant in ValidEnabledTenants(cfg))
             {
                 if (token.IsCancellationRequested) break;
                 try { RunUploadPngFor(cfg, tenant, stateDb); }
@@ -268,10 +273,10 @@ public class InProcessSyncHost
         }
 
         var stateDb = OpenStateDb();
-        var enabledTenants = cfg.Tenants.Where(t => t.Enabled).ToList();
+        var enabledTenants = ValidEnabledTenants(cfg).ToList();
         if (enabledTenants.Count == 0)
         {
-            PushError("PdfWatcher: kein aktiver Mandant in der Konfiguration — Watcher nicht gestartet.");
+            PushError("PdfWatcher: kein aktiver Mandant mit gültiger Tenant-ID in der Konfiguration — Watcher nicht gestartet.");
             return;
         }
 
@@ -312,17 +317,32 @@ public class InProcessSyncHost
         }
     }
 
-    private static StateDb OpenStateDb()
-    {
-        var stateDir = Environment.ExpandEnvironmentVariables(@"%PROGRAMDATA%\SamedisCare\SplSync\state");
-        Directory.CreateDirectory(stateDir);
-        return new StateDb(Path.Combine(stateDir, "state.sqlite"));
-    }
+    private static StateDb OpenStateDb() => AppPaths.OpenStateDb();
 
     private static string TenantScratchDir(TenantConfig tenant)
+        => AppPaths.TenantScratchDir(tenant.SamedisTenantId);
+
+    /// <summary>
+    /// Aktive Mandanten mit gültiger <c>samedis_tenant_id</c>. Ungültige (z. B. der
+    /// Beispiel-Platzhalter „&lt;...&gt;") werden mit einer klaren Meldung übersprungen,
+    /// statt später einen kryptischen Pfad-Syntax-Fehler beim Anlegen des Scratch-Ordners
+    /// zu werfen. Warnung pro Mandant nur einmal (siehe <see cref="_warnedInvalidTenants"/>).
+    /// </summary>
+    private IEnumerable<TenantConfig> ValidEnabledTenants(AppConfig cfg)
     {
-        var root = Environment.ExpandEnvironmentVariables(@"%PROGRAMDATA%\SamedisCare\SplSync\scratch");
-        return Path.Combine(root, tenant.SamedisTenantId);
+        foreach (var tenant in cfg.Tenants.Where(t => t.Enabled))
+        {
+            var problem = ConfigValidation.ValidateTenantId(tenant);
+            if (problem == null)
+            {
+                yield return tenant;
+                continue;
+            }
+
+            var key = $"{tenant.Name}|{tenant.SamedisTenantId}";
+            if (_warnedInvalidTenants.Add(key))
+                PushError($"{tenant.Name}: {problem} — Mandant wird übersprungen.");
+        }
     }
 
     private static IActimedRepository BuildActimedRepository(AppConfig cfg)

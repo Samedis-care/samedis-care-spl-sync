@@ -4,8 +4,14 @@ using SamedisCare.SplSync.Core.Config;
 namespace SamedisCare.SplSync.Core.Sync;
 
 /// <summary>Resultat eines Mapping-Lookups: die zu nutzende Tätigkeitsart und (falls konfiguriert)
-/// die konkrete A3_ACTIVITY mit der hinterlegten Prüfvorschrift.</summary>
-public record MaintenanceKindMatch(string ActimedKind, string? ActimedActivityName);
+/// die konkrete A3_ACTIVITY mit der hinterlegten Prüfvorschrift bzw. — für das Auto-Anlegen —
+/// die zu verwendende Prüfvorschrift (TEST_SPEC) und das Prüfintervall.</summary>
+public record MaintenanceKindMatch(
+    string ActimedKind,
+    string? ActimedActivityName,
+    string? ActimedTestSpecName = null,
+    int? ActimedTestSpecId = null,
+    int? IntervalMonths = null);
 
 /// <summary>
 /// Maps free-form Samedis service/title strings to a curated Actimed
@@ -24,7 +30,9 @@ public class MaintenanceKindMapper
         MaintenanceKindMatch defaultMatch = new("MPBe_§7_Wartung/Inspektion", null);
         foreach (var e in entries)
         {
-            var result = new MaintenanceKindMatch(e.ActimedKind, e.ActimedActivityName);
+            var result = new MaintenanceKindMatch(
+                e.ActimedKind, e.ActimedActivityName,
+                e.ActimedTestSpecName, e.ActimedTestSpecId, e.ActimedActivityIntervalMonths);
 
             if (string.IsNullOrWhiteSpace(e.Match))
             {

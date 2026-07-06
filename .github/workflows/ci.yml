@@ -1,0 +1,36 @@
+name: CI
+
+# Baut das Deploy-Paket (Single-File win-x64 EXE) bei jedem PR auf main und bei
+# Pushes auf main/develop. Das Ergebnis liegt als herunterladbares Artifact am
+# jeweiligen Actions-Lauf — so kann jeder die EXE direkt aus dem PR ziehen.
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    name: Build, Test & Package (win-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # build-deploy.sh macht restore -> test -> publish (Single-File, self-contained
+      # win-x64) -> assembliert deploy/. Cross-Compile nach Windows ist im Projekt
+      # vorgesehen (EnableWindowsTargeting). Schlägt fehl, wenn ein Test fehlschlägt.
+      - name: Build deploy package
+        run: bash build-deploy.sh
+
+      - name: Upload EXE + Deploy-Paket
+        uses: actions/upload-artifact@v4
+        with:
+          name: SamedisCare.SplSync-win-x64
+          path: deploy/
+          if-no-files-found: error

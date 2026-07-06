@@ -109,6 +109,22 @@ public class SyncConfig
     public bool CreateIssuesFromActimed { get; set; } = false;
     public bool CreateInventoriesFromActimed { get; set; } = false;
     public bool SetInventoryOperationStatusOnFailedMaintenance { get; set; } = false;
+
+    /// <summary>
+    /// Erlaubt dem Download, eine fehlende A3_ACTIVITY (Tätigkeit) selbst anzulegen, wenn für die
+    /// gemappte KIND_ID noch keine existiert. Voraussetzung: der passende
+    /// maintenance_kind_mapping-Eintrag gibt die Prüfvorschrift explizit an
+    /// (actimed_test_spec_name oder actimed_test_spec_id). Ohne gültige Prüfvorschrift wird nichts
+    /// angelegt (kein TEST_SPEC=1/"Unbekannt"), das Issue bleibt offen mit klarer Meldung. Default false.
+    /// </summary>
+    public bool CreateActivitiesFromMapping { get; set; } = false;
+
+    /// <summary>
+    /// Legt nach dem Abschluss einer Prüfung (Upload) in Samedis automatisch die geplante
+    /// Folgemaßnahme an: neues maintenance-Issue mit due_on = Prüfdatum + Intervall (Monate aus
+    /// A3_ACTIVITY bzw. abgeleitet). Idempotent pro abgeschlossenem Test. Default false.
+    /// </summary>
+    public bool CreatePlannedIssueAfterCompletion { get; set; } = false;
 }
 
 public class MaintenanceKindMappingEntry
@@ -121,11 +137,25 @@ public class MaintenanceKindMappingEntry
 
     /// <summary>
     /// Optional aber dringend empfohlen: A3_ACTIVITY.ACTIVITY_NAME — die konkrete Tätigkeit mit
-    /// hinterlegter Prüfvorschrift. Ohne dieses Feld nimmt der Sync irgendeine Activity zur
-    /// KIND_ID; falls keine existiert, legt er eine mit TEST_SPEC_ID=1 (=Unbekannt) an, was zu
-    /// einem leeren Prüfprotokoll in Actimed führt (keine Prüfschritte hinterlegt).
+    /// hinterlegter Prüfvorschrift. Ist es gesetzt, wird diese existierende Tätigkeit
+    /// wiederverwendet (muss dann existieren, sonst Fehler).
     /// </summary>
     public string? ActimedActivityName { get; set; }
+
+    /// <summary>
+    /// Optional: TEST_SPEC.NAME der Prüfvorschrift, die verwendet werden soll, wenn der Sync
+    /// eine fehlende A3_ACTIVITY für diese Wartungsart selbst anlegt
+    /// (nur wirksam bei <see cref="SyncConfig.CreateActivitiesFromMapping"/>=true und wenn keine
+    /// Tätigkeit für die KIND_ID existiert). Alternativ per ID über
+    /// <see cref="ActimedTestSpecId"/>. TEST_SPEC=1 ("Unbekannt") wird abgelehnt.
+    /// </summary>
+    public string? ActimedTestSpecName { get; set; }
+
+    /// <summary>Optional: TEST_SPEC.TEST_SPEC_ID direkt (Vorrang vor <see cref="ActimedTestSpecName"/>).</summary>
+    public int? ActimedTestSpecId { get; set; }
+
+    /// <summary>Optional: Prüfintervall in Monaten für die neu angelegte Tätigkeit. Default 12.</summary>
+    public int? ActimedActivityIntervalMonths { get; set; }
 }
 
 public class LoggingConfig
@@ -134,7 +164,8 @@ public class LoggingConfig
     public int Level { get; set; } = 1;
     /// <summary>0 none, 1 console, 2 file, 3 console+file.</summary>
     public int Mode { get; set; } = 3;
-    public string Directory { get; set; } = "%PROGRAMDATA%\\SamedisCare\\SplSync\\logs";
+    /// <summary>Log-Verzeichnis. Relativer Pfad (Default "logs") wird relativ zum EXE-Ordner aufgelöst.</summary>
+    public string Directory { get; set; } = "logs";
 }
 
 public class HttpConfig

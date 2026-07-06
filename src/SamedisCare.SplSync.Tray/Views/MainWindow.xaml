@@ -76,7 +76,7 @@
 
                     <DockPanel DockPanel.Dock="Top" Margin="0,8,0,4">
                         <TextBlock TextWrapping="Wrap" Foreground="#444"
-                                   Text="Pro Zeile eine Mapping-Regel. Erste passende Regex gewinnt; Eintrag mit leerem 'Match' ist der Fallback. 'Actimed Kind' muss exakt mit A3_ACTIVITY_KIND.KIND_NAME uebereinstimmen (inkl. Sonderzeichen wie §). 'Activity Name' ist optional aber empfohlen — ohne diesen Eintrag erzeugt der Sync eine Tätigkeit ohne Pruefvorschrift, das Pruefprotokoll in Actimed bleibt dann leer."/>
+                                   Text="Pro Zeile eine Mapping-Regel. Erste passende Regex gewinnt; Eintrag mit leerem 'Match' ist der Fallback. 'Actimed Kind' muss exakt mit A3_ACTIVITY_KIND.KIND_NAME uebereinstimmen (inkl. Sonderzeichen wie §). Für die Prüfvorschrift zwei Wege: 'Activity Name' verweist auf eine bereits in Actimed vorhandene Tätigkeit (bevorzugt); alternativ trägt 'Test Spec Name' die Prüfvorschrift ein, die der Sync verwendet, wenn er eine fehlende Tätigkeit selbst anlegt (nur wenn in Einstellungen 'Fehlende Tätigkeiten anlegen' aktiv ist)."/>
                     </DockPanel>
 
                     <DataGrid x:Name="MappingGrid"
@@ -88,8 +88,10 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Match (Regex)" Binding="{Binding Match,               UpdateSourceTrigger=PropertyChanged}" Width="*"/>
                             <DataGridTextColumn Header="Actimed Kind"  Binding="{Binding ActimedKind,         UpdateSourceTrigger=PropertyChanged}" Width="*"/>
-                            <DataGridTextColumn Header="Activity Name (Pruefvorschrift)"
+                            <DataGridTextColumn Header="Activity Name (vorhandene Tätigkeit)"
                                                 Binding="{Binding ActimedActivityName, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                            <DataGridTextColumn Header="Test Spec Name (für Auto-Anlegen)"
+                                                Binding="{Binding ActimedTestSpecName, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
@@ -176,6 +178,8 @@
                             <CheckBox x:Name="SyncCreateIssuesFromActimed" Content="Falls noch nicht in Samedis: Vorgang anlegen (selten benötigt)" Margin="0,4,0,0"/>
                             <CheckBox x:Name="SyncCreateInventoriesFromActimed" Content="Falls noch nicht in Samedis: Inventar anlegen (selten benötigt)" Margin="0,4,0,0"/>
                             <CheckBox x:Name="SyncSetInventoryOpStatusOnFailed" Content="Bei Prüfung 'nicht bestanden' Inventar auf 'limited_use' setzen" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncCreateActivitiesFromMapping" Content="Fehlende Tätigkeiten in Actimed anlegen (benötigt 'Test Spec Name' im Wartungsart-Mapping)" Margin="0,4,0,0"/>
+                            <CheckBox x:Name="SyncCreatePlannedIssueAfterCompletion" Content="Geplante Prüfung nach Abschluss automatisch anlegen (Prüfdatum + Intervall)" Margin="0,4,0,0"/>
 
                             <TextBlock Style="{StaticResource SectionHeader}" Text="Logging"/>
                             <Grid>

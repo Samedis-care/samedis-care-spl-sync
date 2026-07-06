@@ -180,6 +180,8 @@ public partial class MainWindow : Window
         SyncCreateIssuesFromActimed.IsChecked = cfg.Sync.CreateIssuesFromActimed;
         SyncCreateInventoriesFromActimed.IsChecked = cfg.Sync.CreateInventoriesFromActimed;
         SyncSetInventoryOpStatusOnFailed.IsChecked = cfg.Sync.SetInventoryOperationStatusOnFailedMaintenance;
+        SyncCreateActivitiesFromMapping.IsChecked = cfg.Sync.CreateActivitiesFromMapping;
+        SyncCreatePlannedIssueAfterCompletion.IsChecked = cfg.Sync.CreatePlannedIssueAfterCompletion;
 
         LoggingLevel.Text     = cfg.Logging.Level.ToString(CultureInfo.InvariantCulture);
         LoggingMode.Text      = cfg.Logging.Mode.ToString(CultureInfo.InvariantCulture);
@@ -237,6 +239,8 @@ public partial class MainWindow : Window
             cfg.Sync.CreateIssuesFromActimed = SyncCreateIssuesFromActimed.IsChecked == true;
             cfg.Sync.CreateInventoriesFromActimed = SyncCreateInventoriesFromActimed.IsChecked == true;
             cfg.Sync.SetInventoryOperationStatusOnFailedMaintenance = SyncSetInventoryOpStatusOnFailed.IsChecked == true;
+            cfg.Sync.CreateActivitiesFromMapping = SyncCreateActivitiesFromMapping.IsChecked == true;
+            cfg.Sync.CreatePlannedIssueAfterCompletion = SyncCreatePlannedIssueAfterCompletion.IsChecked == true;
 
             cfg.Logging.Level     = ParseIntOrDefault(LoggingLevel.Text, 1, min: 0, max: 2);
             cfg.Logging.Mode      = ParseIntOrDefault(LoggingMode.Text, 3, min: 0, max: 3);
@@ -559,12 +563,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static StateDb OpenStateDbForUi()
-    {
-        var stateDir = Environment.ExpandEnvironmentVariables(@"%PROGRAMDATA%\SamedisCare\SplSync\state");
-        Directory.CreateDirectory(stateDir);
-        return new StateDb(Path.Combine(stateDir, "state.sqlite"));
-    }
+    private static StateDb OpenStateDbForUi() => AppPaths.OpenStateDb();
 
     private static IActimedRepository BuildActimedRepository(AppConfig cfg)
     {

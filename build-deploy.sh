@@ -103,73 +103,14 @@ fi
 cp "${TRAY_PROJECT}/config.yml.example" "${DEPLOY_DIR}/"
 ok "config.yml.example copied"
 
-# Quick-start README in the deploy folder
-cat > "${DEPLOY_DIR}/README.txt" <<'EOF'
-SamedisCare.SplSync - Deployment package
-=========================================
-
-Inhalt:
-  SamedisCare.SplSync.Tray.exe   Single-File EXE (self-contained .NET 8)
-  SamedisCare.SplSync.Tray.pdb   Debug-Symbole (optional, fuer Crash-Reports)
-  config.yml.example              Template-Config, vor erstem Start ausfuellen
-  README.txt                      Diese Datei
-
-
-VORAUSSETZUNGEN (Pflicht!)
-==========================
-
-Auf dem Windows-Notebook muss der x64-OLE-DB-Provider fuer Access
-installiert sein, sonst kann Tray.exe die actimed3db.mdb nicht oeffnen.
-
-1. Download:
-   https://www.microsoft.com/en-us/download/details.aspx?id=54920
-
-2. Stille Installation (Pflicht, weil Actimed eine 32-bit ACE-Engine
-   mitbringt und der grafische Installer sonst abbricht):
-
-       AccessDatabaseEngine_X64.exe /quiet
-
-3. Verifizieren, dass der Provider registriert ist:
-
-       powershell -ExecutionPolicy Bypass -Command "
-         (New-Object System.Data.OleDb.OleDbEnumerator).GetElements() |
-            Where-Object { \$_.SOURCES_NAME -like '*ACE*' } |
-            Select-Object SOURCES_NAME, SOURCES_DESCRIPTION
-       "
-
-   Wenn dort 'Microsoft.ACE.OLEDB.16.0' auftaucht, ist alles bereit.
-
-
-SCHNELLSTART
-============
-
-1. Diesen Ordner an einen festen Ort kopieren, z.B. C:\spl-sync\
-
-2. config.yml.example zu config.yml umbenennen und Werte ausfuellen:
-   - auth.client_id / auth.client_secret
-   - actimed.database_path
-   - actimed.protocol_pdf_dir (fuer Modus 1, PDF-Pickup)
-   - tenants[]
-   - sync.upload_mode_pdf_pickup und/oder sync.upload_mode_png_on_completion
-
-3. Doppelklick auf SamedisCare.SplSync.Tray.exe.
-   Tray-Icon erscheint rechts unten. Rechtsklick -> Kontextmenue.
-
-4. Komfort: ueber 'Mandanten zuordnen...' im Tray-Menue kann die Tenant-
-   und CUST_ID-Zuordnung per UI gemacht werden, ohne YAML zu editieren.
-
-5. Autostart (optional): Verknuepfung in shell:startup ablegen
-   (Win+R -> 'shell:startup' eingeben -> Verknuepfung in den Ordner ziehen).
-
-
-SPEICHERORTE ZUR LAUFZEIT
-=========================
-
-Logs:           %PROGRAMDATA%\SamedisCare\SplSync\logs\
-State-DB:       %PROGRAMDATA%\SamedisCare\SplSync\state\state.sqlite
-PNG-Cache:      %PROGRAMDATA%\SamedisCare\SplSync\scratch\<tenant_id>\
-EOF
-ok "README.txt geschrieben"
+# Deploy-README aus versionierter Vorlage uebernehmen (docs/deploy-README.txt)
+DEPLOY_README_SRC="${ROOT_DIR}/docs/deploy-README.txt"
+if [[ -f "${DEPLOY_README_SRC}" ]]; then
+    cp "${DEPLOY_README_SRC}" "${DEPLOY_DIR}/README.txt"
+    ok "README.txt aus docs/deploy-README.txt uebernommen"
+else
+    warn "docs/deploy-README.txt fehlt - README.txt wird nicht erzeugt"
+fi
 
 # ---- Optional: zip --------------------------------------------------------
 
