@@ -1151,3 +1151,7 @@ noch offen. Alle sind beim Onboarding des ersten Pilot-Kunden zu klären:
 ---
 
 _Stand: 2026-05-06_
+
+---
+
+Before starting substantive work, read OPERATING_MANUAL.md in this directory — it defines the working method for this project.
