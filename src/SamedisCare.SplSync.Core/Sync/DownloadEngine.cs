@@ -1,6 +1,10 @@
 using Newtonsoft.Json;
 using SamedisCare.SplSync.Core.Actimed;
 using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.Auth;
+using SamedisCare.Api.Http;
+using SamedisCare.Api.Query;
+using SamedisCare.Helper.Logging;
 
 namespace SamedisCare.SplSync.Core.Sync;
 

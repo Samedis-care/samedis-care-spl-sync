@@ -1,4 +1,9 @@
+using SamedisCare.SplSync.Core.Api;
 using Newtonsoft.Json;
+
+using SamedisCare.Api.Common;
+using SamedisCare.Api.Http;
+using SamedisCare.Helper.Logging;
 
 namespace SamedisCare.SplSync.Core.Api;
 
@@ -91,7 +96,7 @@ public class Issues
     public class Root
     {
         [JsonProperty("data")]
-        [JsonConverter(typeof(Helper.SingleOrArrayConverter<Data>))]
+        [JsonConverter(typeof(JsonApi.SingleOrArrayConverter<Data>))]
         public List<Data>? Data { get; set; }
 
         [JsonProperty("meta")] public Meta? Meta { get; set; }

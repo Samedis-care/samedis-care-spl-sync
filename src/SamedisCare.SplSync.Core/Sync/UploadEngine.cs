@@ -1,6 +1,11 @@
+using SamedisCare.Api.Common;
 using System.Text.RegularExpressions;
 using SamedisCare.SplSync.Core.Actimed;
 using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.Auth;
+using SamedisCare.Api.Http;
+using SamedisCare.Api.Query;
+using SamedisCare.Helper.Logging;
 
 namespace SamedisCare.SplSync.Core.Sync;
 
@@ -214,7 +219,7 @@ public class UploadEngine
                 return;
             }
 
-            var newId = Helper.ExtractDataId(response);
+            var newId = JsonApi.ExtractDataId(response);
             followups.Record(_ctx.Tenant.SamedisTenantId, test.TestId, newId);
             _ctx.Log.Info(
                 $"Geplante Folgemaßnahme angelegt: Issue {newId}, inventar={test.DevId}, " +
@@ -276,7 +281,7 @@ public class UploadEngine
         if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             throw new InvalidOperationException(
                 DownloadEngine.FormatHttpError("POST", resource, _ctx.Samedis.StatusCode, _ctx.Samedis.LastError, response));
-        var newId = Helper.ExtractDataId(response);
+        var newId = JsonApi.ExtractDataId(response);
         if (!string.IsNullOrEmpty(newId))
             _ctx.Log.Info($"PDF-Pickup: neues Samedis-Issue {newId} fuer Pruefberichtsnr={test.Pruefberichtsnummer} angelegt.");
         return newId;
@@ -334,7 +339,7 @@ public class UploadEngine
                        $"&quickfilter=&gridfilter={fb.Get()}";
         var response = _ctx.Samedis.Get(resource);
         if (_ctx.Samedis.StatusCode is < 200 or >= 300) return null;
-        return Helper.ExtractDataId(response);
+        return JsonApi.ExtractDataId(response);
     }
 
     /// <summary>
@@ -482,7 +487,7 @@ public class UploadEngine
         var response = _ctx.Samedis.Get(resource);
         string? id = null;
         if (_ctx.Samedis.StatusCode is >= 200 and < 300)
-            id = Helper.ExtractDataId(response);
+            id = JsonApi.ExtractDataId(response);
         _inventoryIdCache[deviceNumber] = id;
         if (string.IsNullOrEmpty(id))
             _ctx.Log.Warn($"Konnte inventory_id fuer device_number='{deviceNumber}' nicht aufloesen.");
@@ -526,7 +531,7 @@ public class UploadEngine
         _ctx.Log.Info($"PNG-Upload: '{path}' ({new FileInfo(path).Length} bytes) -> Issue {issueId}");
 
         var uploadUrl = $"{_ctx.TenantScope}/issues/{issueId}/uploads";
-        var response = _ctx.Samedis.PostIssueImage(uploadUrl, path, fileName);
+        var response = _ctx.Samedis.PostDocument(uploadUrl, path, fileName);
         if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             throw new InvalidOperationException(
                 DownloadEngine.FormatHttpError("POST", uploadUrl, _ctx.Samedis.StatusCode, _ctx.Samedis.LastError, response));
@@ -543,7 +548,7 @@ public class UploadEngine
 
         var fileName = SafeFile($"{test.Pruefberichtsnummer}.pdf");
         var uploadUrl = $"{_ctx.TenantScope}/issues/{issueId}/uploads";
-        var response = _ctx.Samedis.PostIssueDocument(uploadUrl, pdfPath, fileName);
+        var response = _ctx.Samedis.PostDocument(uploadUrl, pdfPath, fileName);
         if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             throw new InvalidOperationException(
                 DownloadEngine.FormatHttpError("POST", uploadUrl, _ctx.Samedis.StatusCode, _ctx.Samedis.LastError, response));
