@@ -130,6 +130,20 @@
                             <TextBlock Style="{StaticResource FieldLabel}" Text="API-Version"/>
                             <TextBox x:Name="SamedisApiVersion" Style="{StaticResource FieldInput}"/>
 
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Zugriffsweg"/>
+                            <ComboBox x:Name="SamedisAccessMode" Margin="0,2,0,2" Padding="6,4"
+                                      SelectionChanged="AccessMode_SelectionChanged">
+                                <ComboBoxItem Content="tenant"/>
+                                <ComboBoxItem Content="enterprise"/>
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource FieldHint}"
+                                       Text="tenant — der Account ist Mitglied der Mandanten und greift direkt zu. Für Techniker im eigenen Haus.&#10;enterprise — Zugriff über die Service-Welt des Dienstleisters; die Kunden sind dort seine Clients. Für externe Dienstleister, die in den Kundenmandanten kein Benutzerkonto haben."/>
+
+                            <TextBlock x:Name="EnterpriseTenantLabel" Style="{StaticResource FieldLabel}" Text="Service-Welt (Mandant des Dienstleisters)"/>
+                            <TextBox x:Name="SamedisEnterpriseTenantId" Style="{StaticResource FieldInput}"/>
+                            <TextBlock x:Name="EnterpriseTenantHint" Style="{StaticResource FieldHint}"
+                                       Text="Die 24-stellige ID des eigenen Mandanten mit aktivem Enterprise-Modul. Die Kundenmandanten stehen weiterhin unter „Mandanten…“."/>
+
                             <TextBlock Style="{StaticResource SectionHeader}" Text="Actimed"/>
                             <TextBlock Style="{StaticResource FieldLabel}" Text="Pfad zur actimed3db.mdb"/>
                             <DockPanel>

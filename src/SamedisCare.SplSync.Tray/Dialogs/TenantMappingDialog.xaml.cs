@@ -208,6 +208,20 @@ public partial class TenantMappingDialog : Window
 
         log.Info($"Querying tenants list against {cfg.Samedis.Uri} (api {cfg.Samedis.ApiVersion})");
         var samedis = new RequestData(cfg.Samedis.Uri, auth.BearerToken, http, log);
+
+        // Zwei Welten, zwei Quellen. Ein externer Dienstleister ist kein Mitglied der
+        // Kundenmandanten — /user/tenants liefert ihm deshalb seine eigene Service-Welt,
+        // nicht seine Kunden. Die stehen unter enterprise/tenants/{id}/clients.
+        if (cfg.Samedis.IsEnterprise)
+        {
+            log.Info($"Service-Welt {cfg.Samedis.EnterpriseTenantId}: lade Kundenliste.");
+            return EnterpriseClients
+                .List(samedis, cfg.Samedis.ApiVersion, cfg.Samedis.EnterpriseTenantId, log)
+                .Select(c => new UserTenantSummary(c.TenantId, c.Name))
+                .ToList();
+        }
+
+        log.Info("Direkter Zugriff: lade die Mandanten des Accounts.");
         return Tenant.ListUserTenants(samedis, cfg.Samedis.ApiVersion, log);
     }
 

@@ -160,6 +160,9 @@ public partial class MainWindow : Window
 
         SamedisUri.Text        = cfg.Samedis.Uri;
         SamedisApiVersion.Text = cfg.Samedis.ApiVersion;
+        SelectComboValue(SamedisAccessMode, cfg.Samedis.AccessMode);
+        SamedisEnterpriseTenantId.Text = cfg.Samedis.EnterpriseTenantId;
+        UpdateEnterpriseFieldVisibility();
 
         ActimedDatabasePath.Text   = cfg.Actimed.DatabasePath;
         ActimedProtocolPdfDir.Text = cfg.Actimed.ProtocolPdfDir;
@@ -219,6 +222,9 @@ public partial class MainWindow : Window
 
             cfg.Samedis.Uri        = SamedisUri.Text.Trim();
             cfg.Samedis.ApiVersion = SamedisApiVersion.Text.Trim();
+            cfg.Samedis.AccessMode = (SamedisAccessMode.SelectedItem as ComboBoxItem)?.Content?.ToString()
+                                     ?? AccessModes.Tenant;
+            cfg.Samedis.EnterpriseTenantId = SamedisEnterpriseTenantId.Text.Trim();
 
             cfg.Actimed.DatabasePath      = ActimedDatabasePath.Text.Trim();
             cfg.Actimed.ProtocolPdfDir    = ActimedProtocolPdfDir.Text.Trim();
@@ -325,6 +331,37 @@ public partial class MainWindow : Window
         if (v < min) return min;
         if (v > max) return max;
         return v;
+    }
+
+    // -----------------------------------------------------------------------------
+    // Zugriffsweg (tenant / enterprise)
+    // -----------------------------------------------------------------------------
+
+    private void AccessMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => UpdateEnterpriseFieldVisibility();
+
+    /// <summary>
+    /// Das Service-Welt-Feld nur zeigen, wenn der Zugriffsweg auf enterprise steht — im
+    /// tenant-Modus wäre es leer und verwirrend.
+    /// </summary>
+    private void UpdateEnterpriseFieldVisibility()
+    {
+        if (SamedisEnterpriseTenantId is null) return;   // während InitializeComponent
+
+        var enterprise = string.Equals((SamedisAccessMode.SelectedItem as ComboBoxItem)?.Content?.ToString(),
+                                       AccessModes.Enterprise, StringComparison.OrdinalIgnoreCase);
+        var visibility = enterprise ? Visibility.Visible : Visibility.Collapsed;
+
+        EnterpriseTenantLabel.Visibility = visibility;
+        SamedisEnterpriseTenantId.Visibility = visibility;
+        EnterpriseTenantHint.Visibility = visibility;
+    }
+
+    private static void SelectComboValue(System.Windows.Controls.ComboBox box, string? value)
+    {
+        var match = box.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(i => string.Equals(i.Content?.ToString(), value, StringComparison.OrdinalIgnoreCase));
+        box.SelectedItem = match ?? box.Items.OfType<ComboBoxItem>().FirstOrDefault();
     }
 
     // -----------------------------------------------------------------------------
