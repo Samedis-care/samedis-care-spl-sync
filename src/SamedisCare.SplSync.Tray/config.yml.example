@@ -7,6 +7,17 @@ samedis:
   uri: "https://sync.samedis.care"
   api_version: "v4"
 
+  # Zugriffsweg: "tenant" (Standard) oder "enterprise".
+  #   tenant     – der Sync-Account ist Mitglied des Mandanten, direkter Zugriff auf
+  #                /api/v4/tenants/{mandant}/…  (Techniker im eigenen Haus).
+  #   enterprise – Dienstleister mit Service-Welt; die Kunden sind seine Clients, alles
+  #                läuft über /api/v4/enterprise/tenants/{dienstleister}/clients/{kunde}/…
+  # Die Ressourcen und Felder sind in beiden Welten gleich, nur der Pfad-Präfix wechselt.
+  access_mode: "tenant"
+  # Nur bei access_mode "enterprise": der 24-stellige ObjectId des Dienstleister-Mandanten
+  # (der Service-Welt selbst). Die Kundenmandanten stehen wie gewohnt unter tenants:.
+  enterprise_tenant_id: ""
+
 actimed:
   database_path: "C:\\Program Files (x86)\\Actimed3\\actimed3db.mdb"
   # Pickup-Verzeichnis für Modus 1 (PDF-Watcher).

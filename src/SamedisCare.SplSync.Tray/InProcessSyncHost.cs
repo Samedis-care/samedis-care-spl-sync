@@ -40,6 +40,7 @@ public class InProcessSyncHost
     // übersprungen. Damit der schnelle Upload-Poll-Loop die "Letzte Meldungen"-Liste nicht
     // alle 30 s zumüllt, warnen wir pro Mandant nur einmal pro Prozess-Lebensdauer.
     private readonly HashSet<string> _warnedInvalidTenants = new();
+    private readonly HashSet<string> _warnedConfigProblems = new();
 
     public event Action<TrayStatus>? OnStatusChanged;
     public event Action? OnLockBlocked;
@@ -313,12 +314,22 @@ public class InProcessSyncHost
 
     private AppConfig? TryLoadConfig()
     {
-        try { return ConfigStore.Load(_configPath); }
+        AppConfig cfg;
+        try { cfg = ConfigStore.Load(_configPath); }
         catch (Exception ex)
         {
             UpdateStatus(SyncState.Error, $"Config: {ex.Message}");
             return null;
         }
+
+        // Zugriffsweg prüfen (tenant vs. enterprise). Eine Service-Welt ohne
+        // enterprise_tenant_id läuft sonst still in 404s, die wie „keine Daten" aussehen.
+        // Pro Problem nur einmal warnen, damit nicht jeder Tick die Meldung wiederholt.
+        foreach (var problem in ConfigValidation.ValidateAccessMode(cfg))
+            if (_warnedConfigProblems.Add(problem))
+                PushError(problem);
+
+        return cfg;
     }
 
     private static StateDb OpenStateDb() => AppPaths.OpenStateDb();

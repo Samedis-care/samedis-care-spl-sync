@@ -211,7 +211,7 @@ public class UploadEngine
         try
         {
             var attrs = BuildFollowupAttributes(test, dueOn, m);
-            var resource = $"{_ctx.TenantScope}/issues";
+            var resource = $"{_ctx.Scope}/issues";
             var response = _ctx.Samedis.Post(resource, Issues.BuildEnvelope(attrs));
             if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             {
@@ -276,7 +276,7 @@ public class UploadEngine
         if (!force && !_ctx.Config.Sync.CreateIssuesFromActimed) return null;
         var attrs = BuildAttributes(test);
         attrs["status"] = "done";
-        var resource = $"{_ctx.TenantScope}/issues";
+        var resource = $"{_ctx.Scope}/issues";
         var response = _ctx.Samedis.Post(resource, Issues.BuildEnvelope(attrs));
         if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             throw new InvalidOperationException(
@@ -299,7 +299,7 @@ public class UploadEngine
         var attrs = BuildAttributes(test);
         attrs["status"] = "done";
         var body = Issues.BuildEnvelope(attrs);
-        var resource = $"{_ctx.TenantScope}/issues";
+        var resource = $"{_ctx.Scope}/issues";
         var response = _ctx.Samedis.Put(resource, issueId, body);
         var status = _ctx.Samedis.StatusCode;
         if (status is >= 200 and < 300) return;
@@ -334,7 +334,7 @@ public class UploadEngine
         // schon archiviert wurde, wollen wir es trotzdem updaten koennen.
         var fb = new FilterBuilder();
         fb.Add("external_id", FilterBuilder.FilterType.Equals, FilterBuilder.Type.Text, test.Pruefberichtsnummer);
-        var resource = $"{_ctx.TenantScope}/issues" +
+        var resource = $"{_ctx.Scope}/issues" +
                        $"?page[number]=1&page[limit]=1" +
                        $"&quickfilter=&gridfilter={fb.Get()}";
         var response = _ctx.Samedis.Get(resource);
@@ -481,7 +481,7 @@ public class UploadEngine
 
         var fb = new FilterBuilder();
         fb.Add("device_number", FilterBuilder.FilterType.Equals, FilterBuilder.Type.Text, deviceNumber);
-        var resource = $"{_ctx.TenantScope}/inventories" +
+        var resource = $"{_ctx.Scope}/inventories" +
                        $"?page[number]=1&page[limit]=1" +
                        $"&quickfilter=&gridfilter={fb.Get()}";
         var response = _ctx.Samedis.Get(resource);
@@ -530,7 +530,7 @@ public class UploadEngine
         AssertReadable(path, "PNG-Werteprotokoll");
         _ctx.Log.Info($"PNG-Upload: '{path}' ({new FileInfo(path).Length} bytes) -> Issue {issueId}");
 
-        var uploadUrl = $"{_ctx.TenantScope}/issues/{issueId}/uploads";
+        var uploadUrl = $"{_ctx.Scope}/issues/{issueId}/uploads";
         var response = _ctx.Samedis.PostDocument(uploadUrl, path, fileName);
         if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             throw new InvalidOperationException(
@@ -547,7 +547,7 @@ public class UploadEngine
         _ctx.Log.Info($"PDF-Upload: '{pdfPath}' ({new FileInfo(pdfPath).Length} bytes) -> Issue {issueId}");
 
         var fileName = SafeFile($"{test.Pruefberichtsnummer}.pdf");
-        var uploadUrl = $"{_ctx.TenantScope}/issues/{issueId}/uploads";
+        var uploadUrl = $"{_ctx.Scope}/issues/{issueId}/uploads";
         var response = _ctx.Samedis.PostDocument(uploadUrl, pdfPath, fileName);
         if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             throw new InvalidOperationException(

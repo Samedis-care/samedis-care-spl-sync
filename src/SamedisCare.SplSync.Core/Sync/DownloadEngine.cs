@@ -56,7 +56,7 @@ public class DownloadEngine
             // URL-Schema laut samedis-care Webview:
             //   /tenants/{id}/inventories?page[..]&quickfilter=&gridfilter={...}
             //                            &filter[variant]=regular&filter[status]=active
-            var resource = $"{_ctx.TenantScope}/inventories" +
+            var resource = $"{_ctx.Scope}/inventories" +
                            $"?page[number]={page}&page[limit]={pageLimit}" +
                            $"&quickfilter=&gridfilter={fb.Get()}" +
                            $"&filter[variant]=regular" +
@@ -236,7 +236,7 @@ public class DownloadEngine
             // Hinweis: filter[archive] ist KEIN Boolean — gültige Werte laut Spec sind nur ''
             // (default: nur die letzten 24 Monate) und 'true' (auch aeltere). Wir lassen den
             // Parameter weg und nehmen den 24-Monats-Default; das passt zu unserem Use-Case.
-            var resource = $"{_ctx.TenantScope}/issues" +
+            var resource = $"{_ctx.Scope}/issues" +
                            $"?page[number]={page}&page[limit]={pageLimit}" +
                            $"&quickfilter=&gridfilter={fb.Get()}" +
                            $"&filter[status]=not_done" +
