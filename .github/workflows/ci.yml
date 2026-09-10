@@ -1,12 +1,12 @@
 name: CI
 
-# Baut das Deploy-Paket (Single-File win-x64 EXE) bei jedem PR auf main und bei
-# Pushes auf main/develop. Das Ergebnis liegt als herunterladbares Artifact am
-# jeweiligen Actions-Lauf — so kann jeder die EXE direkt aus dem PR ziehen.
+# Builds the deploy package (single-file win-x64 EXE) on every PR into main or
+# develop and on pushes to main/develop. The result is attached to the Actions run
+# as a downloadable artifact — so anyone can pull the EXE straight from the PR.
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
   push:
     branches: [ main, develop ]
 
