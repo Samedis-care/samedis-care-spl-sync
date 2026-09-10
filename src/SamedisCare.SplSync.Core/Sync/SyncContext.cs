@@ -1,5 +1,10 @@
 using SamedisCare.SplSync.Core.Actimed;
 using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.Auth;
+using SamedisCare.Api.Http;
+using SamedisCare.Api.Query;
+using SamedisCare.Api.Routing;
+using SamedisCare.Helper.Logging;
 using SamedisCare.SplSync.Core.Config;
 
 namespace SamedisCare.SplSync.Core.Sync;
@@ -21,9 +26,23 @@ public class SyncContext
     public required IssueLinkStore IssueLinks { get; init; }
     public required MaintenanceKindMapper KindMapper { get; init; }
 
-    /// <summary>e.g. "/api/v4/tenants/&lt;tenant_id&gt;"</summary>
-    public string TenantScope =>
-        $"/api/{Config.Samedis.ApiVersion}/tenants/{Tenant.SamedisTenantId}";
+    /// <summary>
+    /// URL-Präfix, unter dem die Ressourcen dieses Mandanten liegen — die einzige Stelle,
+    /// an der sich Direktzugriff und Service-Welt unterscheiden:
+    ///
+    /// <code>
+    /// tenant     /api/v4/tenants/{mandant}
+    /// enterprise /api/v4/enterprise/tenants/{dienstleister}/clients/{mandant}
+    /// </code>
+    ///
+    /// Baut auf der geteilten <see cref="ITenantScope"/> aus <c>SamedisCare.Api</c> auf —
+    /// dieselbe Präfix-Quelle wie external-sync und fluke-sync. Die Ressourcen darunter
+    /// heissen gleich und akzeptieren dieselben Felder; Interpolation
+    /// (<c>$"{Scope}/issues"</c>) ruft <see cref="object.ToString"/> und liefert den Präfix.
+    /// </summary>
+    public ITenantScope Scope => Config.Samedis.IsEnterprise
+        ? TenantScope.Enterprise(Config.Samedis.EnterpriseTenantId, Tenant.SamedisTenantId, Config.Samedis.ApiVersion)
+        : TenantScope.Standard(Tenant.SamedisTenantId, Config.Samedis.ApiVersion);
 }
 
 /// <summary>

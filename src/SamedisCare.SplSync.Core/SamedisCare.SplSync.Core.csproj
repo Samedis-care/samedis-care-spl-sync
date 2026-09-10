@@ -14,14 +14,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="RestSharp" Version="112.1.0" />
     <PackageReference Include="SkiaSharp" Version="2.88.8" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.8" />
     <!-- DPAPI (ProtectedData / DataProtectionScope). Cross-platform package; on non-Windows
          the calls are no-ops gated by OperatingSystem.IsWindows() in ConfigStore. -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-    <PackageReference Include="YamlDotNet" Version="15.1.6" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
   <!-- System.Data.OleDb: managed package, compiles cross-platform but only functional on Windows.
@@ -30,6 +28,15 @@
        OperatingSystem.IsWindows(). -->
   <ItemGroup>
     <PackageReference Include="System.Data.OleDb" Version="8.0.0" />
+  </ItemGroup>
+
+
+  <!-- Auth, HTTP, gridfilter, tenant scope and logging come from the shared packages; the
+       local Api/ folder held byte-identical copies of all of them. Newtonsoft and RestSharp
+       arrive through them. -->
+  <ItemGroup>
+    <PackageReference Include="SamedisCare.Api" Version="1.0.0" />
+    <PackageReference Include="SamedisCare.Helper" Version="1.0.0" />
   </ItemGroup>
 
 </Project>

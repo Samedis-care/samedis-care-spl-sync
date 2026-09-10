@@ -1,6 +1,11 @@
+using System.Globalization;
 using Newtonsoft.Json;
 using SamedisCare.SplSync.Core.Actimed;
 using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.Auth;
+using SamedisCare.Api.Http;
+using SamedisCare.Api.Query;
+using SamedisCare.Helper.Logging;
 
 namespace SamedisCare.SplSync.Core.Sync;
 
@@ -52,7 +57,7 @@ public class DownloadEngine
             // URL-Schema laut samedis-care Webview:
             //   /tenants/{id}/inventories?page[..]&quickfilter=&gridfilter={...}
             //                            &filter[variant]=regular&filter[status]=active
-            var resource = $"{_ctx.TenantScope}/inventories" +
+            var resource = $"{_ctx.Scope}/inventories" +
                            $"?page[number]={page}&page[limit]={pageLimit}" +
                            $"&quickfilter=&gridfilter={fb.Get()}" +
                            $"&filter[variant]=regular" +
@@ -232,7 +237,7 @@ public class DownloadEngine
             // Hinweis: filter[archive] ist KEIN Boolean — gültige Werte laut Spec sind nur ''
             // (default: nur die letzten 24 Monate) und 'true' (auch aeltere). Wir lassen den
             // Parameter weg und nehmen den 24-Monats-Default; das passt zu unserem Use-Case.
-            var resource = $"{_ctx.TenantScope}/issues" +
+            var resource = $"{_ctx.Scope}/issues" +
                            $"?page[number]={page}&page[limit]={pageLimit}" +
                            $"&quickfilter=&gridfilter={fb.Get()}" +
                            $"&filter[status]=not_done" +
@@ -396,10 +401,13 @@ public class DownloadEngine
         return pool[0];
     }
 
+    // due_on / date arrive as ISO from the Samedis API, so the host culture has not bitten
+    // here -- but the parsed value goes on to A3_IS_ACT_DEV.Next in the customer's Actimed
+    // database, which is not a place to rely on the locale a service happens to run under.
     private static DateTime? ParseDate(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
-        return DateTime.TryParse(raw, out var dt) ? dt : null;
+        return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt) ? dt : null;
     }
 
     /// <summary>

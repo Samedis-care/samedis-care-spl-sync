@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 
 namespace SamedisCare.SplSync.Core.Sync;
@@ -65,10 +66,12 @@ public class IssueLinkStore
 
         DateTimeOffset? plannedDue = null;
         var rawDue = rdr["planned_due"] as string;
-        if (!string.IsNullOrWhiteSpace(rawDue) && DateTimeOffset.TryParse(rawDue, out var parsed))
+        if (!string.IsNullOrWhiteSpace(rawDue)
+            && DateTimeOffset.TryParse(rawDue, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
             plannedDue = parsed;
 
-        var dl = DateTimeOffset.TryParse(rdr["downloaded_at"] as string, out var dlp) ? dlp : DateTimeOffset.UtcNow;
+        var dl = DateTimeOffset.TryParse(rdr["downloaded_at"] as string, CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var dlp) ? dlp : DateTimeOffset.UtcNow;
 
         return new IssueLinkRow(
             TenantId: tenantId,
@@ -98,10 +101,12 @@ public class IssueLinkStore
 
         DateTimeOffset? plannedDue = null;
         var rawDue = rdr["planned_due"] as string;
-        if (!string.IsNullOrWhiteSpace(rawDue) && DateTimeOffset.TryParse(rawDue, out var parsed))
+        if (!string.IsNullOrWhiteSpace(rawDue)
+            && DateTimeOffset.TryParse(rawDue, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
             plannedDue = parsed;
 
-        var dl = DateTimeOffset.TryParse(rdr["downloaded_at"] as string, out var dlp) ? dlp : DateTimeOffset.UtcNow;
+        var dl = DateTimeOffset.TryParse(rdr["downloaded_at"] as string, CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var dlp) ? dlp : DateTimeOffset.UtcNow;
 
         return new IssueLinkRow(
             TenantId: tenantId,

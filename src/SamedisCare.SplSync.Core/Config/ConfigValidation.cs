@@ -35,4 +35,41 @@ public static class ConfigValidation
 
         return null;
     }
+
+    /// <summary>
+    /// Prüft den Zugriffsweg (<c>samedis.access_mode</c>). Die häufigste Fehlkonfiguration ist
+    /// eine Service-Welt ohne <c>enterprise_tenant_id</c> — dann laufen alle Aufrufe gegen einen
+    /// Pfad mit leerem Segment und der Server antwortet 404, was nach „keine Daten" aussieht
+    /// statt nach „falsch konfiguriert". Liefert eine Liste lesbarer Probleme (leer = alles gut).
+    /// </summary>
+    public static IReadOnlyList<string> ValidateAccessMode(AppConfig cfg)
+    {
+        var problems = new List<string>();
+        var mode = cfg.Samedis.AccessMode?.Trim() ?? "";
+
+        if (!AccessModes.All.Contains(mode))
+        {
+            problems.Add(
+                $"samedis.access_mode '{mode}' ist unbekannt. Erlaubt: " +
+                string.Join(" | ", AccessModes.All));
+            return problems;
+        }
+
+        if (!cfg.Samedis.IsEnterprise)
+        {
+            if (!string.IsNullOrWhiteSpace(cfg.Samedis.EnterpriseTenantId))
+                problems.Add(
+                    "samedis.enterprise_tenant_id ist gesetzt, access_mode steht aber auf 'tenant' — " +
+                    "der Wert bleibt wirkungslos.");
+            return problems;
+        }
+
+        var id = cfg.Samedis.EnterpriseTenantId;
+        if (string.IsNullOrWhiteSpace(id))
+            problems.Add("samedis.enterprise_tenant_id fehlt — bei access_mode 'enterprise' ist sie Pflicht.");
+        else if (ValidateTenantId(new TenantConfig { SamedisTenantId = id }) is { } p)
+            problems.Add($"samedis.enterprise_tenant_id: {p}");
+
+        return problems;
+    }
 }

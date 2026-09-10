@@ -1,4 +1,9 @@
 using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.Auth;
+using SamedisCare.Api.Http;
+using SamedisCare.Api.Query;
+using SamedisCare.Helper.Logging;
+using YamlDotNet.Serialization;
 
 namespace SamedisCare.SplSync.Core.Config;
 
@@ -42,6 +47,48 @@ public class SamedisConfig
 {
     public string Uri { get; set; } = "https://sync.samedis.care";
     public string ApiVersion { get; set; } = "v4";
+
+    /// <summary>
+    /// Wie der Account an die Mandantendaten kommt — <c>tenant</c> oder <c>enterprise</c>.
+    ///
+    /// <b>tenant</b>: der Sync-Account ist Mitglied des Mandanten, es geht direkt auf
+    /// <c>/api/{v}/tenants/{tenant}/…</c>. Das ist der Fall für Techniker im eigenen Haus.
+    ///
+    /// <b>enterprise</b>: der Dienstleister hat eine Service-Welt, die Kundenmandanten sind
+    /// seine <em>Clients</em>, und alles läuft über
+    /// <c>/api/{v}/enterprise/tenants/{dienstleister}/clients/{kunde}/…</c>. Ein externer
+    /// Dienstleister ist typischerweise <b>nicht</b> Mitglied der Kundenmandanten und käme
+    /// über den direkten Weg gar nicht an die Daten.
+    ///
+    /// Die Ressourcen dahinter sind in beiden Welten dieselben — gleiche Felder, gleiche
+    /// erlaubten Parameter. Es unterscheidet sich nur das Präfix.
+    /// </summary>
+    public string AccessMode { get; set; } = AccessModes.Tenant;
+
+    /// <summary>
+    /// Der Mandant der Service-Welt, also der Dienstleister selbst. Nur bei
+    /// <see cref="AccessMode"/> = enterprise nötig; die Kundenmandanten stehen wie gewohnt
+    /// unter <c>tenants:</c>.
+    /// </summary>
+    public string EnterpriseTenantId { get; set; } = "";
+
+    /// <summary>
+    /// Abgeleitet, gehört nicht in die Datei. Ohne YamlIgnore landet beim Speichern ein
+    /// `is_enterprise:` in der config.yml, das aussieht wie ein Schalter, aber beim Laden
+    /// wirkungslos ist — wer ihn umstellt, ändert nichts.
+    /// </summary>
+    [YamlIgnore]
+    public bool IsEnterprise =>
+        string.Equals(AccessMode?.Trim(), AccessModes.Enterprise, StringComparison.OrdinalIgnoreCase);
+}
+
+public static class AccessModes
+{
+    public const string Tenant = "tenant";
+    public const string Enterprise = "enterprise";
+
+    public static readonly IReadOnlySet<string> All =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Tenant, Enterprise };
 }
 
 public class ActimedConfig
