@@ -1,3 +1,4 @@
+using System.Globalization;
 using Newtonsoft.Json;
 using SamedisCare.SplSync.Core.Actimed;
 using SamedisCare.SplSync.Core.Api;
@@ -400,10 +401,13 @@ public class DownloadEngine
         return pool[0];
     }
 
+    // due_on / date arrive as ISO from the Samedis API, so the host culture has not bitten
+    // here -- but the parsed value goes on to A3_IS_ACT_DEV.Next in the customer's Actimed
+    // database, which is not a place to rely on the locale a service happens to run under.
     private static DateTime? ParseDate(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
-        return DateTime.TryParse(raw, out var dt) ? dt : null;
+        return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt) ? dt : null;
     }
 
     /// <summary>
