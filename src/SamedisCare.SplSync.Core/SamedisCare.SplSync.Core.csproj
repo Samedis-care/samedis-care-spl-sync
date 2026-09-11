@@ -35,8 +35,8 @@
        local Api/ folder held byte-identical copies of all of them. Newtonsoft and RestSharp
        arrive through them. -->
   <ItemGroup>
-    <PackageReference Include="SamedisCare.Api" Version="1.0.0" />
-    <PackageReference Include="SamedisCare.Helper" Version="1.0.0" />
+    <PackageReference Include="SamedisCare.Api" Version="1.1.0" />
+    <PackageReference Include="SamedisCare.Helper" Version="1.1.0" />
   </ItemGroup>
 
 </Project>
