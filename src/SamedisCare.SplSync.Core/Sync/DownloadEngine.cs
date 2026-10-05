@@ -1,7 +1,7 @@
 using System.Globalization;
 using Newtonsoft.Json;
 using SamedisCare.SplSync.Core.Actimed;
-using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Auth;
 using SamedisCare.Api.Http;
 using SamedisCare.Api.Query;
@@ -116,7 +116,7 @@ public class DownloadEngine
     private InventoryOutcome ApplyInventory(Inventories.Data item)
     {
         var attr = item.Attributes ?? throw new InvalidOperationException("inventory has no attributes");
-        var inventoryNo = attr.DeviceNumber ?? attr.InventoryNumber;
+        var inventoryNo = attr.DeviceNumber;
         if (string.IsNullOrWhiteSpace(inventoryNo))
         {
             _ctx.Log.Debug($"Inventory {item.Id} has no device_number — skipping");
@@ -304,7 +304,7 @@ public class DownloadEngine
                 $"Issue {issue.Id} references inventory {inventoryDeviceNumber} which is not in Actimed for this tenant.");
 
         // Map Samedis maintenance flavor → Actimed activity kind + (optional) konkrete Activity.
-        var match = _ctx.KindMapper.Resolve(attr.MaintenanceType, attr.Title, attr.Services);
+        var match = _ctx.KindMapper.Resolve(attr.Title, attr.Services);
         var kindName = match.ActimedKind;
 
         var kind = _ctx.Actimed.FindActivityKindByName(kindName);
@@ -350,7 +350,7 @@ public class DownloadEngine
         }
 
         // Schedule it.
-        var dueOn = ParseDate(attr.DueOn) ?? ParseDate(attr.Date) ?? DateTime.Today;
+        var dueOn = ParseDate(attr.Date) ?? DateTime.Today;
         var inserted = _ctx.Actimed.UpsertIsActDev(new ActimedIsActDev(
             DevId: device.DevId,
             ActivityId: activity.ActivityId,
@@ -401,7 +401,7 @@ public class DownloadEngine
         return pool[0];
     }
 
-    // due_on / date arrive as ISO from the Samedis API, so the host culture has not bitten
+    // date arrives as ISO from the Samedis API, so the host culture has not bitten
     // here -- but the parsed value goes on to A3_IS_ACT_DEV.Next in the customer's Actimed
     // database, which is not a place to rely on the locale a service happens to run under.
     private static DateTime? ParseDate(string? raw)

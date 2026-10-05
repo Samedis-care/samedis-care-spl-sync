@@ -132,7 +132,7 @@ PDF-Drucker fuer Modus 1 (einmalig in Actimed einrichten):
 
 6. WARTUNGSART-MAPPING
 ======================
-Bruecke: Samedis-Issue (services/title/maintenance_type) --Regex--> Actimed-
+Bruecke: Samedis-Issue (services/title) --Regex--> Actimed-
 Taetigkeitsart (A3_ACTIVITY_KIND) --> Taetigkeit (A3_ACTIVITY) mit
 Pruefvorschrift (TEST_SPEC). Editor im Reiter "Wartungsart-Mapping"; pro Zeile:
 
@@ -186,8 +186,9 @@ einer Wartungsart ist Variante A sauberer als Variante B.
                                         anlegen (braucht Test Spec Name im
                                         Mapping; Default false)
   create_planned_issue_after_completion nach Abschluss die geplante
-                                        Folgemassnahme in Samedis anlegen
-                                        (due_on = Pruefdatum + Intervall),
+                                        Folgemassnahme in Samedis anlegen,
+                                        verknuepft wie im Samedis-Web
+                                        (date = Pruefdatum + Intervall),
                                         idempotent pro Test (Default false)
 
 Intervall-Umrechnung: Actimed fuehrt Monate, Samedis Betrag + Einheit

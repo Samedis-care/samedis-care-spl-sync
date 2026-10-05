@@ -1,10 +1,12 @@
 using SamedisCare.Api.Common;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using SamedisCare.SplSync.Core.Actimed;
-using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Auth;
 using SamedisCare.Api.Http;
 using SamedisCare.Api.Query;
+using SamedisCare.Api.Routing;
 using SamedisCare.Helper.Logging;
 
 namespace SamedisCare.SplSync.Core.Sync;
@@ -181,17 +183,21 @@ public class UploadEngine
 
         // Optional: geplante Folgemaßnahme in Samedis anlegen (Prüfdatum + Intervall).
         if (_ctx.Config.Sync.CreatePlannedIssueAfterCompletion)
-            CreatePlannedFollowup(test);
+            CreatePlannedFollowup(issueId, test);
     }
 
     /// <summary>
-    /// Legt nach Abschluss einer Prüfung die geplante Folgemaßnahme in Samedis an:
-    /// neues maintenance-Issue mit status=_new und due_on = Prüfdatum + Intervall (Monate).
+    /// Legt nach Abschluss einer Prüfung die geplante Folgemaßnahme in Samedis an — genauso
+    /// wie das Frontend beim Abschluss: <c>POST issues/{id}/next_events</c> mit nur
+    /// <c>date</c> = Prüfdatum + Intervall (Monate). Samedis verknüpft die Folgemaßnahme mit dem
+    /// abgeschlossenen Vorgang (<c>previous_issue_id</c>) und übernimmt Gerät, Titel, Services,
+    /// Intervalle, Verantwortlichen und Prüfmittel von dort.
     /// Idempotent über <see cref="PlannedFollowupStore"/> (verhindert Duplikate beim 30-s-Polling
-    /// und im Dual-Mode). Ein Fehler hier wird nur geloggt, nicht geworfen — der eigentliche
+    /// und im Dual-Mode) und über <c>next_issue_id</c> des Vorgangs (Folgemaßnahme schon im UI
+    /// angelegt). Ein Fehler hier wird nur geloggt, nicht geworfen — der eigentliche
     /// Abschluss + Anhang soll dadurch nicht zurückgerollt werden.
     /// </summary>
-    private void CreatePlannedFollowup(ActimedFinishedTest test)
+    private void CreatePlannedFollowup(string issueId, ActimedFinishedTest test)
     {
         var followups = new PlannedFollowupStore(_ctx.State);
         if (followups.Exists(_ctx.Tenant.SamedisTenantId, test.TestId))
@@ -206,13 +212,30 @@ public class UploadEngine
             return;
         }
 
-        var dueOn = test.TestDate.AddMonths(m);
+        var date = test.TestDate.AddMonths(m);
 
         try
         {
-            var attrs = BuildFollowupAttributes(test, dueOn, m);
-            var resource = $"{_ctx.Scope}/issues";
-            var response = _ctx.Samedis.Post(resource, Issues.BuildEnvelope(attrs));
+            // Samedis lehnt eine zweite Folgemaßnahme ab, aber nur mit einer lokalisierten
+            // Meldung als 400. Deshalb vorher am Vorgang nachsehen statt die Meldung auszuwerten.
+            var issueResource = $"{_ctx.Scope}/issues/{issueId}";
+            var issueResponse = _ctx.Samedis.Get(issueResource);
+            if (_ctx.Samedis.StatusCode is < 200 or >= 300)
+            {
+                _ctx.Log.Warn(DownloadEngine.FormatHttpError("GET", issueResource, _ctx.Samedis.StatusCode, _ctx.Samedis.LastError, issueResponse));
+                return;
+            }
+
+            var existingId = ExistingFollowupId(issueResponse);
+            if (existingId != null)
+            {
+                followups.Record(_ctx.Tenant.SamedisTenantId, test.TestId, existingId);
+                _ctx.Log.Info($"Folgemaßnahme zu Vorgang {issueId} existiert bereits (Issue {existingId}) — nichts angelegt.");
+                return;
+            }
+
+            var resource = NextEventResource(_ctx.Scope, issueId);
+            var response = _ctx.Samedis.Post(resource, BuildNextEventEnvelope(date));
             if (_ctx.Samedis.StatusCode is < 200 or >= 300)
             {
                 _ctx.Log.Warn(DownloadEngine.FormatHttpError("POST", resource, _ctx.Samedis.StatusCode, _ctx.Samedis.LastError, response));
@@ -222,8 +245,8 @@ public class UploadEngine
             var newId = JsonApi.ExtractDataId(response);
             followups.Record(_ctx.Tenant.SamedisTenantId, test.TestId, newId);
             _ctx.Log.Info(
-                $"Geplante Folgemaßnahme angelegt: Issue {newId}, inventar={test.DevId}, " +
-                $"due_on={dueOn:yyyy-MM-dd} (Prüfdatum {test.TestDate:yyyy-MM-dd} + {m} Monate).");
+                $"Geplante Folgemaßnahme angelegt: Issue {newId}, verknüpft mit Vorgang {issueId}, " +
+                $"date={date:yyyy-MM-dd} (Prüfdatum {test.TestDate:yyyy-MM-dd} + {m} Monate).");
         }
         catch (Exception ex)
         {
@@ -232,39 +255,29 @@ public class UploadEngine
     }
 
     /// <summary>
-    /// Payload für die geplante Folgemaßnahme (neues, offenes maintenance-Issue). Bewusst OHNE
-    /// external_id/done_at/test_result — die trägt erst die tatsächlich durchgeführte Prüfung.
+    /// Der Endpunkt, über den auch das Frontend die verknüpfte Folgemaßnahme anlegt. Gilt für
+    /// Mandanten- wie Enterprise-Scope, die Verschachtelung unter issues ist dieselbe.
     /// </summary>
-    private Dictionary<string, object> BuildFollowupAttributes(ActimedFinishedTest test, DateTime dueOn, int months)
-    {
-        var device = _ctx.Actimed.GetDeviceById(test.DevId);
-        var inventoryDeviceNumber = device?.InventoryNo ?? "";
-        var title = string.IsNullOrWhiteSpace(test.PvsName) ? "Wartung/Pruefung" : test.PvsName!;
+    public static string NextEventResource(ITenantScope scope, string issueId)
+        => scope.Resource($"issues/{issueId}/next_events");
 
-        var dict = new Dictionary<string, object>
+    /// <summary>
+    /// <c>next_events</c> nimmt nur <c>date</c> an; alles andere übernimmt Samedis vom Vorgänger.
+    /// </summary>
+    public static string BuildNextEventEnvelope(DateTime date)
+        => Issues.BuildEnvelope(new Dictionary<string, object>
         {
-            ["issue_type"]       = "maintenance",
-            ["task_type"]        = "maintenance",
-            ["maintenance_type"] = "maintenance",
-            ["status"]           = "_new",
-            ["title"]            = title,
-            ["services"]         = new[] { title },
-            ["due_on"]           = dueOn.ToString("yyyy-MM-dd"),
-            ["auto_create_test_protocol"] = false
-        };
+            ["date"] = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        });
 
-        if (!string.IsNullOrEmpty(inventoryDeviceNumber))
-        {
-            dict["inventory_device_number"] = inventoryDeviceNumber;
-            var invId = ResolveInventoryId(inventoryDeviceNumber);
-            if (!string.IsNullOrEmpty(invId)) dict["inventory_id"] = invId;
-        }
-
-        var intervals = BuildServiceIntervals(months, title);
-        if (intervals != null) dict["with_service_intervals"] = intervals;
-
-        return dict;
-    }
+    /// <summary>
+    /// <c>next_issue_id</c> aus der Detailantwort eines Vorgangs, oder null, solange er keine
+    /// Folgemaßnahme hat.
+    /// </summary>
+    public static string? ExistingFollowupId(string? issueJson)
+        => JsonApi.FirstData(issueJson)?["attributes"]?["next_issue_id"]?.ToString() is { Length: > 0 } id
+            ? id
+            : null;
 
     /// <summary>
     /// Legt ein neues Issue in Samedis an. <paramref name="force"/> umgeht das
@@ -402,7 +415,7 @@ public class UploadEngine
         var device = _ctx.Actimed.GetDeviceById(test.DevId);
         var inventoryDeviceNumber = device?.InventoryNo ?? "";
 
-        // POST /issues braucht laut Server ZWINGEND: inventory_id, task_type, due_on, title.
+        // Nur Felder aus PERMIT_CREATE (issues_controller.rb) — alles andere verwirft Rails still.
         // PUT auf existierendes Issue ist toleranter — fehlt eines, bleibt der bisherige Wert.
         // Wir setzen bei beiden alles, dann passt's in jedem Fall.
         var title = string.IsNullOrWhiteSpace(test.PvsName) ? "Wartung/Pruefung" : test.PvsName!;
@@ -413,19 +426,12 @@ public class UploadEngine
 
         var dict = new Dictionary<string, object>
         {
-            // Issue-Klassifizierung — beide Aliase setzen, weil je nach Backend-Version mal das
-            // eine, mal das andere als pflicht-required-Feld validiert wird.
-            ["issue_type"]       = "maintenance",
-            ["task_type"]        = "maintenance",
-            ["maintenance_type"] = "maintenance",
-
+            ["issue_type"]    = "maintenance",
             ["external_id"]   = test.Pruefberichtsnummer ?? "",
             ["title"]         = title,
             ["services"]      = new[] { title },
             ["date"]          = dateIso,
             ["done_at"]       = dateIso,
-            ["due_on"]        = dateIso,                  // Server-required bei POST
-            ["responsible_name"]    = performer,
             ["maintenance_performer"] = performer,
 
             // Verhindert, dass Samedis sein eigenes Pruefprotokoll generiert — wir liefern ja
@@ -437,7 +443,6 @@ public class UploadEngine
         // resolven device_number -> inventory_id ueber einen API-Call, gecacht pro UploadEngine.
         if (!string.IsNullOrEmpty(inventoryDeviceNumber))
         {
-            dict["inventory_device_number"] = inventoryDeviceNumber;
             var invId = ResolveInventoryId(inventoryDeviceNumber);
             if (!string.IsNullOrEmpty(invId)) dict["inventory_id"] = invId;
         }

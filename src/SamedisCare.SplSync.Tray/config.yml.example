@@ -82,10 +82,11 @@ sync:
   create_activities_from_mapping: false
 
   # Legt nach Abschluss einer Prüfung (Upload) automatisch die geplante Folgemaßnahme in Samedis
-  # an: neues maintenance-Issue mit due_on = Prüfdatum + Intervall (Monate). Idempotent pro Test.
+  # an, verknüpft mit dem abgeschlossenen Vorgang wie im Samedis-Web: date = Prüfdatum + Intervall
+  # (Monate). Idempotent pro Test.
   create_planned_issue_after_completion: false
 
-# Wartungsart-Mapping: regex auf Samedis-Wartungstyp/Titel/Services -> Actimed-Tätigkeit.
+# Wartungsart-Mapping: regex auf Samedis-Titel/Services -> Actimed-Tätigkeit.
 #
 # Pflicht-Felder:
 #   actimed_kind   — Name der A3_ACTIVITY_KIND (Tätigkeitsart) in Actimed.
