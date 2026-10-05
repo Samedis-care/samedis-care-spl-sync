@@ -168,8 +168,9 @@ public class SyncConfig
 
     /// <summary>
     /// Legt nach dem Abschluss einer Prüfung (Upload) in Samedis automatisch die geplante
-    /// Folgemaßnahme an: neues maintenance-Issue mit due_on = Prüfdatum + Intervall (Monate aus
-    /// A3_ACTIVITY bzw. abgeleitet). Idempotent pro abgeschlossenem Test. Default false.
+    /// Folgemaßnahme an, verknüpft mit dem abgeschlossenen Vorgang (next_events, wie im
+    /// Samedis-Web): date = Prüfdatum + Intervall (Monate aus A3_ACTIVITY bzw. abgeleitet).
+    /// Idempotent pro abgeschlossenem Test. Default false.
     /// </summary>
     public bool CreatePlannedIssueAfterCompletion { get; set; } = false;
 }

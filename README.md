@@ -105,7 +105,7 @@ flowchart TD
   L -- nein --> N{create_activities_from_mapping<br/>UND Test Spec gesetzt?}
   N -- ja --> O[A3_ACTIVITY anlegen<br/>TEST_SPEC + Intervall aus<br/>with_service_intervals]
   N -- nein --> P[Issue offen lassen<br/>+ Meldung]
-  J --> Q[A3_IS_ACT_DEV<br/>ACT_DEV_NEXT = due_on]
+  J --> Q[A3_IS_ACT_DEV<br/>ACT_DEV_NEXT = date]
   M --> Q
   O --> Q
   Q --> R[issue_link speichern<br/>DEV_ID ↔ Samedis-Issue]
@@ -124,7 +124,7 @@ flowchart TD
   E --> G
   G --> H[Anhang hochladen<br/>PNG-Wertenachweis bzw. Actimed-PDF]
   H --> I{create_planned_issue_after_completion?}
-  I -- ja + noch nicht angelegt --> J[POST Folgemaßnahme<br/>status=_new<br/>due_on = Prüfdatum + Intervall]
+  I -- ja + noch nicht angelegt --> J[POST issues/{id}/next_events<br/>verknüpfte Folgemaßnahme<br/>date = Prüfdatum + Intervall]
   I -- nein --> K[fertig]
   J --> L[planned_followup merken<br/>Idempotenz pro TEST_ID]
 ```
@@ -133,11 +133,11 @@ flowchart TD
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Geplant_Samedis: Wartung in Samedis angelegt<br/>due_on + Intervall
+  [*] --> Geplant_Samedis: Wartung in Samedis angelegt<br/>date + Intervall
   Geplant_Samedis --> Geplant_Actimed: Download → A3_IS_ACT_DEV
   Geplant_Actimed --> Durchgeführt: Techniker prüft in Actimed<br/>→ A3_FINISHED_TEST
   Durchgeführt --> Abgeschlossen: Upload PUT status=done<br/>+ Anhang PNG/PDF
-  Abgeschlossen --> Geplant_Samedis: optional Folgemaßnahme<br/>due_on = Prüfdatum + Intervall
+  Abgeschlossen --> Geplant_Samedis: optional verknüpfte Folgemaßnahme<br/>date = Prüfdatum + Intervall
   Abgeschlossen --> [*]
 ```
 
@@ -186,16 +186,16 @@ elektrischen Geräteklasse ab (SKI/SKII × B/BF/CF …).
 
 `sync.create_planned_issue_after_completion` (Default **aus**). Nach dem
 erfolgreichen Abschluss einer Prüfung (Upload) legt der Sync in Samedis die
-nächste geplante Maßnahme an: ein neues maintenance-Issue mit `status=_new` und
-`due_on = Prüfdatum + Intervall`. **Idempotent** pro abgeschlossenem Test (Tabelle
-`planned_followup` in der `state.sqlite`) — der 30-Sekunden-Poll und der
-Dual-Mode erzeugen also keine Duplikate.
+nächste geplante Maßnahme an — auf demselben Weg wie das Samedis-Web beim
+Abschluss eines Vorgangs: `POST …/issues/{id}/next_events` mit
+`date = Prüfdatum + Intervall`. Samedis verknüpft die Folgemaßnahme mit dem
+abgeschlossenen Vorgang und übernimmt Gerät, Titel, Services, Intervalle,
+Verantwortlichen und Prüfmittel von dort.
 
-> **Achtung Doppelanlage**: Falls euer Samedis-Backend die Folgemaßnahme bei
-> `status=done` mit hinterlegtem Intervall selbst erzeugt, würde diese Option
-> zusätzliche (doppelte) Vorgänge anlegen. Beim ersten echten Upload prüfen, ob
-> genau **eine** Folgemaßnahme entsteht; wenn Samedis sie selbst anlegt, den
-> Schalter aus lassen.
+**Idempotent** pro abgeschlossenem Test (Tabelle `planned_followup` in der
+`state.sqlite`) — der 30-Sekunden-Poll und der Dual-Mode erzeugen also keine
+Duplikate. Hat jemand die Folgemaßnahme schon im Samedis-Web angelegt
+(`next_issue_id` am Vorgang gesetzt), legt der Sync keine zweite an.
 
 ## Datenmodell in Actimed (Crashkurs)
 
@@ -379,7 +379,7 @@ sonst landet die Tätigkeit in Actimed mit Prüfvorschrift „Unbekannt"
 ```
 Samedis-Issue                                Actimed
 ─────────────                                ───────
-attributes.maintenance_type / title /        A3_ACTIVITY_KIND     (Tätigkeitsart)
+attributes.title /                           A3_ACTIVITY_KIND     (Tätigkeitsart)
 attributes.services            ──Regex──►        z. B. "MPBe_§7_Wartung/Inspektion"
                                                        │
                                                        ├─► A3_ACTIVITY  (Tätigkeit)
@@ -392,7 +392,7 @@ attributes.services            ──Regex──►        z. B. "MPBe_§7_Wartu
 
 | Ebene | Wo gepflegt | Was |
 | --- | --- | --- |
-| **Samedis-Issue** (`maintenance_type` / `title` / `services`) | Samedis-Web | freier String, was der Auftrag tun soll |
+| **Samedis-Issue** (`title` / `services`) | Samedis-Web | freier String, was der Auftrag tun soll |
 | **A3_ACTIVITY_KIND** (Tätigkeitsart) | Actimed | Klasse von Wartungen, die der Hersteller mitliefert oder der Dienstleister anlegt |
 | **A3_ACTIVITY** (Tätigkeit) | Actimed | konkrete „Variante" innerhalb einer Tätigkeitsart, mit Intervall + verknüpfter Prüfvorschrift |
 | **TEST_SPEC** (Prüfvorschrift) | Actimed | das Rezept = Schritte + Limits + Messgerät-Funktionen |
@@ -448,8 +448,8 @@ anlegen:
 **Schritt 3 — In Samedis: Service-/Wartungstyp-String festlegen**
 
 Im Samedis-Web werden offene Wartungen als **Issue** mit den
-Attributen `maintenance_type`, `title` und `services[]` angelegt
-(manuell oder per Vorlage). Der Sync greift alle drei Felder ab und
+Attributen `title` und `services[]` angelegt
+(manuell oder per Vorlage). Der Sync greift beide Felder ab und
 matched sie kombiniert per Regex.
 
 In der Praxis reicht es, dass im **Issue-Titel** oder einer **Service-
@@ -527,8 +527,7 @@ Dienstleister will diese alle 24 Monate prüfen.
    - inventory: HeartStart-Inventar
    - title: `Defi STK 24M`
    - services: `["Defi-AED-Prüfung"]`
-   - maintenance_type: `maintenance`
-   - due_on: 2027-05-01
+   - date: 2027-05-01
 4. **Im Tool**, Tab „Wartungsart-Mapping":
    - Match: `(?i)defi.*aed`
    - Actimed Kind: `MPBe_STK Defi (AED)`

@@ -16,16 +16,16 @@ public class MaintenanceKindMapperTests
     });
 
     [Theory]
-    [InlineData("STK nach DGUV V3",         null,            "MPBe_§11_STK/DGUV V3")]
-    [InlineData("MTK BDM 24 Monate",        null,            "MPBe_MTK_BDM")]
-    [InlineData("Blutdruckmessgerät MTK",   null,            "MPBe_MTK_BDM")]
-    [InlineData("Defi AED Funktionsprüfung", "maintenance",  "MPBe_STK Defi (AED)")]
-    [InlineData("Allgemeine Wartung",       null,            "MPBe_§7_Wartung/Inspektion")]
-    [InlineData("",                          null,           "MPBe_§7_Wartung/Inspektion")]
-    public void Maps_titles_to_actimed_kind(string title, string? mtype, string expected)
+    [InlineData("STK nach DGUV V3",          "MPBe_§11_STK/DGUV V3")]
+    [InlineData("MTK BDM 24 Monate",         "MPBe_MTK_BDM")]
+    [InlineData("Blutdruckmessgerät MTK",    "MPBe_MTK_BDM")]
+    [InlineData("Defi AED Funktionsprüfung", "MPBe_STK Defi (AED)")]
+    [InlineData("Allgemeine Wartung",        "MPBe_§7_Wartung/Inspektion")]
+    [InlineData("",                          "MPBe_§7_Wartung/Inspektion")]
+    public void Maps_titles_to_actimed_kind(string title, string expected)
     {
         var mapper = Default();
-        mapper.Map(mtype, title, null).Should().Be(expected);
+        mapper.Resolve(title, null).ActimedKind.Should().Be(expected);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class MaintenanceKindMapperTests
             }
         });
 
-        var match = mapper.Resolve(null, "STK nach DGUV V3", null);
+        var match = mapper.Resolve("STK nach DGUV V3", null);
 
         match.ActimedKind.Should().Be("MPBe_§11_STK/DGUV V3");
         match.ActimedTestSpecName.Should().Be("EN50699_0702_SKI_ErsatzMessung_allg_Grenzwerte");

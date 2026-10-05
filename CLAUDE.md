@@ -477,13 +477,13 @@ Pro gefundenem Issue:
    ohne dass 5.2 lief → Sync stoppt diesen Job, Tray-Dialog meldet „Inventar
    fehlt in Actimed, jetzt synchronisieren?".
 2. Wartungsart-Mapping (siehe 5.5): aus
-   `attributes.maintenance_type` / `services` / `title` →
+   `attributes.services` / `title` →
    `A3_ACTIVITY_KIND.KIND_ID`. Daraus eine konkrete `A3_ACTIVITY` (anlegen,
    falls noch nicht vorhanden, mit passender `TEST_SPEC_ID`).
 3. `A3_IS_ACT_DEV`-Eintrag schreiben/aktualisieren mit:
    - `DEV_ID`
    - `ACTIVITY_ID`
-   - `ACT_DEV_NEXT` ← `attributes.due_on` (oder heute, falls leer)
+   - `ACT_DEV_NEXT` ← `attributes.date` (oder heute, falls leer)
    - `TESTER_ID` ← Default-Prüfer aus Config oder `responsible_name`-Lookup
 4. **Issue-ID merken**: in lokaler SQLite-Tabelle
    `issue_link(samedis_issue_id, samedis_external_id, actimed_dev_id,
@@ -515,9 +515,7 @@ nur **Trigger** und **Anhang-Typ**.
    external_id          <TEST_Pruefberichtsnummer>
    done_at              yyyy-MM-dd  <- TEST_DATE
    date                 yyyy-MM-dd  <- TEST_DATE
-   responsible_name     TESTER_NAME
    maintenance_performer TESTER_NAME
-   maintenance_type     "maintenance"
    services             [PVS_NAME]   (sonst ["maintenance"])
    title                PVS_NAME
    test_result          passed | passed_conditionally | not_passed
@@ -602,7 +600,7 @@ zieht, brauchen wir eine **Mapping-Tabelle in der Config**:
 ```yaml
 maintenance_kind_mapping:
   # erste Treffer-Regex gewinnt; case-insensitive auf
-  # services + title + maintenance_type kombiniert
+  # services + title kombiniert
   - match: "(?i)dguv\\s*v?3|stk.*§11"
     actimed_kind: "MPBe_§11_STK/DGUV V3"
   - match: "(?i)mtk.*bdm|blutdruck"
@@ -813,13 +811,11 @@ inventory_id         (string)        ← aus Inventory-Lookup / issue_link
 issue_type           "maintenance"   ← konstant für unseren Use-Case
 status               "_new" | "pending" | "in_progress" | "done"
 external_id          (string)        ← TEST_Pruefberichtsnummer
-maintenance_type     "maintenance"
 maintenance_performer (string)       ← TESTER_NAME
 services             string[]        ← [PVS_NAME] oder ["maintenance"]
 title                (string)        ← PVS_NAME
 date                 yyyy-MM-dd      ← TEST_DATE
 done_at              yyyy-MM-dd      ← TEST_DATE
-responsible_name     (string)        ← TESTER_NAME
 test_comment         (string, opt.)
 test_result          "passed" | "passed_conditionally" | "not_passed"
 inventory_operation_status (opt.)    ← "limited_use" wenn fehlgeschlagen
