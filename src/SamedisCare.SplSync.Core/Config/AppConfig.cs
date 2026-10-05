@@ -1,4 +1,3 @@
-using SamedisCare.SplSync.Core.Api;
 using SamedisCare.Api.Auth;
 using SamedisCare.Api.Http;
 using SamedisCare.Api.Query;

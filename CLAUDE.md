@@ -879,17 +879,8 @@ maximal n Versuche, dann State = `failed` mit letzter Fehlermeldung.
 
 ```
 src/
-  SamedisCare.SplSync.Core/        # API-Modelle, HTTP, Mapping (testbar, ohne UI)
-    Api/
-      Authenticate.cs
-      RequestData.cs
-      FilterBuilder.cs
-      Tenant.cs
-      Issues.cs                    # Tasks.cs umbenannt: bei uns geht's um Issues
-      Inventories.cs
-      Helper.cs
-      Logging.cs
-      HttpSettings.cs
+  SamedisCare.SplSync.Core/        # Mapping, Sync (testbar, ohne UI); API-Modelle,
+                                   # HTTP, Auth und Filter kommen aus SamedisCare.Api
     Actimed/
       IActimedRepository.cs        # abstrahiert OleDb vs. SQLite
       OleDbActimedRepository.cs    # Produktion (Windows-only zur Laufzeit)

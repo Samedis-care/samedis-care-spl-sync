@@ -631,7 +631,7 @@ der nächste Schreibversuch fängt den Lock erneut ab.
 
 Dieses Projekt steht unter der **MIT-Lizenz** — siehe [LICENSE](LICENSE).
 
-Teile von `Core/Api/` (Authenticate, RequestData, FilterBuilder-Pattern,
-Tenant-Settings) sind eng angelehnt an das öffentliche
+Die API-Schicht (Authenticate, RequestData, FilterBuilder-Pattern,
+Tenant-Settings, heute im Paket SamedisCare.Api) ist eng angelehnt an das öffentliche
 [samedis-care-external-sync](https://github.com/Samedis-care/samedis-care-external-sync)
 (ebenfalls MIT).
