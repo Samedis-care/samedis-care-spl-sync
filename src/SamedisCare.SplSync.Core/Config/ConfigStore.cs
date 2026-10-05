@@ -30,6 +30,9 @@ public static class ConfigStore
 
         var yaml = File.ReadAllText(path);
         var cfg = Deserializer.Deserialize<AppConfig>(yaml) ?? new AppConfig();
+        // Before decrypting: a section written with nothing under it ("auth:") comes back
+        // null, and DecryptSecretsInPlace dereferences Auth and Http (samedis-care-issues#2885).
+        SamedisCare.Helper.Config.ConfigStore.FillNullSections(cfg);
         DecryptSecretsInPlace(cfg);
         return cfg;
     }
