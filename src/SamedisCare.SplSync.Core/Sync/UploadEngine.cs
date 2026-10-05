@@ -287,7 +287,7 @@ public class UploadEngine
     private string? CreateIfAllowed(ActimedFinishedTest test, bool force = false)
     {
         if (!force && !_ctx.Config.Sync.CreateIssuesFromActimed) return null;
-        var attrs = BuildAttributes(test);
+        var attrs = BuildCreateAttributes(test);
         attrs["status"] = "done";
         var resource = $"{_ctx.Scope}/issues";
         var response = _ctx.Samedis.Post(resource, Issues.BuildEnvelope(attrs));
@@ -410,26 +410,69 @@ public class UploadEngine
         return null;
     }
 
-    private Dictionary<string, object> BuildAttributes(ActimedFinishedTest test)
+    /// <summary>
+    /// Payload für einen <b>neu</b> angelegten Vorgang (PDF-Pickup bzw.
+    /// create_issues_from_actimed): der Abschluss plus alles, was ein Vorgang ohne Planung
+    /// braucht — Wartungsart, Gerät, Intervall.
+    /// </summary>
+    private Dictionary<string, object> BuildCreateAttributes(ActimedFinishedTest test)
     {
-        var device = _ctx.Actimed.GetDeviceById(test.DevId);
-        var inventoryDeviceNumber = device?.InventoryNo ?? "";
+        var dict = BuildAttributes(test);
+        var title = ServiceName(test);
 
+        dict["issue_type"] = "maintenance";
+        // title nicht setzen: Samedis leitet ihn bei Wartungen aus services ab.
+        dict["services"] = new[] { title };
+
+        // Inventory-Resolver: Server akzeptiert beim POST nur inventory_id (ObjectId). Wir
+        // resolven device_number -> inventory_id ueber einen API-Call, gecacht pro UploadEngine.
+        var inventoryDeviceNumber = _ctx.Actimed.GetDeviceById(test.DevId)?.InventoryNo ?? "";
+        if (!string.IsNullOrEmpty(inventoryDeviceNumber))
+        {
+            var invId = ResolveInventoryId(inventoryDeviceNumber);
+            if (!string.IsNullOrEmpty(invId)) dict["inventory_id"] = invId;
+        }
+
+        // Prüfintervall aus Actimed mitliefern, sonst legt Samedis die Wartungsart ohne Intervall
+        // ("Unbekannt") an. Primär aus A3_ACTIVITY.ACTIVITY_INTERVAL (Samedis-Ursprung), sonst
+        // aus den Test-Daten abgeleitet.
+        var intervals = BuildServiceIntervals(ResolveIntervalMonths(test), title);
+        if (intervals != null) dict["with_service_intervals"] = intervals;
+
+        return dict;
+    }
+
+    private Dictionary<string, object> BuildAttributes(ActimedFinishedTest test)
+        => BuildCompletionAttributes(test, _ctx.Config.Actimed.DefaultTesterName,
+                                     _ctx.Config.Sync.SetInventoryOperationStatusOnFailedMaintenance);
+
+    /// <summary>
+    /// Die Wartungsart, unter der ein aus Actimed neu angelegter Vorgang geführt wird: der Name
+    /// der Prüfvorschrift (PVS_NAME).
+    /// </summary>
+    public static string ServiceName(ActimedFinishedTest test)
+        => string.IsNullOrWhiteSpace(test.PvsName) ? "Wartung/Pruefung" : test.PvsName!;
+
+    /// <summary>
+    /// Was der Abschluss an einen Vorgang schreibt: Ergebnis, Prüfer, Datum, Betriebsstatus.
+    /// </summary>
+    /// <remarks>
+    /// <b>Ohne services, title und with_service_intervals.</b> Der geplante Vorgang hat seine
+    /// Wartungsart und ihr Intervall schon („STK“, 12 Monate), und bei Wartungen leitet Samedis
+    /// den Titel aus services ab. Den Namen der Prüfvorschrift hier mitzuschicken, ersetzte die
+    /// Wartungsart samt Intervallen, und die verknüpfte Folgemaßnahme erbte das
+    /// (samedis-care-issues#2650). Ein PUT behält nur, was er nicht mitschickt.
+    /// </remarks>
+    public static Dictionary<string, object> BuildCompletionAttributes(
+        ActimedFinishedTest test, string defaultTesterName, bool limitedUseOnFail)
+    {
         // Nur Felder aus PERMIT_CREATE (issues_controller.rb) — alles andere verwirft Rails still.
-        // PUT auf existierendes Issue ist toleranter — fehlt eines, bleibt der bisherige Wert.
-        // Wir setzen bei beiden alles, dann passt's in jedem Fall.
-        var title = string.IsNullOrWhiteSpace(test.PvsName) ? "Wartung/Pruefung" : test.PvsName!;
-        var performer = string.IsNullOrWhiteSpace(test.TesterName)
-            ? _ctx.Config.Actimed.DefaultTesterName
-            : test.TesterName;
-        var dateIso = test.TestDate.ToString("yyyy-MM-dd");
+        var performer = string.IsNullOrWhiteSpace(test.TesterName) ? defaultTesterName : test.TesterName;
+        var dateIso = test.TestDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         var dict = new Dictionary<string, object>
         {
-            ["issue_type"]    = "maintenance",
             ["external_id"]   = test.Pruefberichtsnummer ?? "",
-            ["title"]         = title,
-            ["services"]      = new[] { title },
             ["date"]          = dateIso,
             ["done_at"]       = dateIso,
             ["maintenance_performer"] = performer,
@@ -438,14 +481,6 @@ public class UploadEngine
             // unser eigenes (PNG-Wertenachweis oder Actimed-PDF) direkt als Anhang.
             ["auto_create_test_protocol"] = false
         };
-
-        // Inventory-Resolver: Server akzeptiert beim POST nur inventory_id (ObjectId). Wir
-        // resolven device_number -> inventory_id ueber einen API-Call, gecacht pro UploadEngine.
-        if (!string.IsNullOrEmpty(inventoryDeviceNumber))
-        {
-            var invId = ResolveInventoryId(inventoryDeviceNumber);
-            if (!string.IsNullOrEmpty(invId)) dict["inventory_id"] = invId;
-        }
 
         var testResult = ResultMapping.FromActimed(test.Pruefergebnis);
         if (!string.IsNullOrEmpty(testResult))
@@ -456,20 +491,11 @@ public class UploadEngine
         }
         if (!string.IsNullOrWhiteSpace(test.Memo)) dict["test_comment"] = test.Memo!;
 
-        // Prüfintervall aus Actimed mitliefern, sonst legt Samedis die Wartungsart ohne Intervall
-        // ("Unbekannt") an. Primär aus A3_ACTIVITY.ACTIVITY_INTERVAL (Samedis-Ursprung), sonst
-        // aus den Test-Daten abgeleitet.
-        var intervals = BuildServiceIntervals(ResolveIntervalMonths(test), title);
-        if (intervals != null) dict["with_service_intervals"] = intervals;
-
         // inventory_operation_status ist beim CREATE pflicht-required (Server-Validator).
         // Erlaubt: active | limited_use | out_of_order | retired | decommissioned.
         // Default = active (Geraet ist nach erfolgreicher Pruefung weiter einsatzfaehig).
         // Bei not_passed + Config-Flag: limited_use (Geraet darf nur eingeschraenkt verwendet werden).
-        var operationStatus = "active";
-        if (_ctx.Config.Sync.SetInventoryOperationStatusOnFailedMaintenance && testResult == "not_passed")
-            operationStatus = "limited_use";
-        dict["inventory_operation_status"] = operationStatus;
+        dict["inventory_operation_status"] = limitedUseOnFail && testResult == "not_passed" ? "limited_use" : "active";
 
         return dict;
     }

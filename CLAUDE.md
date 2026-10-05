@@ -516,12 +516,17 @@ nur **Trigger** und **Anhang-Typ**.
    done_at              yyyy-MM-dd  <- TEST_DATE
    date                 yyyy-MM-dd  <- TEST_DATE
    maintenance_performer TESTER_NAME
-   services             [PVS_NAME]   (sonst ["maintenance"])
-   title                PVS_NAME
    test_result          passed | passed_conditionally | not_passed
    test_comment         (aus MEMO, optional)
    inventory_operation_status "limited_use"  (nur wenn not_passed UND Config)
    ```
+
+   **Kein `services`/`title`/`with_service_intervals`.** Der geplante Vorgang hat seine
+   Wartungsart samt Intervall schon, und Samedis leitet bei Wartungen den Titel aus
+   `services` ab. PVS_NAME würde die Wartungsart ersetzen und sich über `next_events` auf die
+   Folgemaßnahme vererben (samedis-care-issues#2650). Nur ein **neu angelegter** Vorgang
+   (PDF-Pickup / `create_issues_from_actimed`) bekommt `services=[PVS_NAME]`, `inventory_id`
+   und `with_service_intervals`.
 
 3. **Anhang hochladen**, je nach Trigger.
 
@@ -802,7 +807,8 @@ GET /api/{api_version}/{tenant_scope}/issues
   `GET /…/issues?gridfilter={"external_id":{…,"value":"<TEST_ID>"}}`
 - **Anlegen** (nur, wenn `create_issues_from_actimed=true`):
   `POST /…/issues` mit Body `{"data":{"type":"issues","attributes":{…}}}`
-- **Update:** `PUT /…/issues/{id}` mit demselben Schema.
+- **Update:** `PUT /…/issues/{id}` nur mit den Abschlussfeldern (ohne `services`, `title`,
+  `with_service_intervals`, `inventory_id`, `issue_type`) — siehe 5.4.
 
 Erwartete Attribute (Quelle: `Tasks.cs` der Referenz):
 
@@ -812,8 +818,7 @@ issue_type           "maintenance"   ← konstant für unseren Use-Case
 status               "_new" | "pending" | "in_progress" | "done"
 external_id          (string)        ← TEST_Pruefberichtsnummer
 maintenance_performer (string)       ← TESTER_NAME
-services             string[]        ← [PVS_NAME] oder ["maintenance"]
-title                (string)        ← PVS_NAME
+services             string[]        ← [PVS_NAME] (nur beim Anlegen)
 date                 yyyy-MM-dd      ← TEST_DATE
 done_at              yyyy-MM-dd      ← TEST_DATE
 test_comment         (string, opt.)
