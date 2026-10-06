@@ -67,4 +67,28 @@ http:
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void Empty_sections_load_as_defaults_instead_of_null()
+    {
+        // Each of these used to come back null; auth and http crashed inside Load itself.
+        var path = Path.GetTempFileName();
+        File.WriteAllText(path, "auth:\nsamedis:\nbranding:\ntenants:\nsync:\nlogging:\nhttp:\napp:\n");
+        try
+        {
+            var cfg = ConfigStore.Load(path);
+            cfg.Auth.Should().NotBeNull();
+            cfg.Samedis.Should().NotBeNull();
+            cfg.Branding.Should().NotBeNull();
+            cfg.Tenants.Should().BeEmpty();
+            cfg.Sync.Should().NotBeNull();
+            cfg.Logging.Should().NotBeNull();
+            cfg.Http.Should().NotBeNull();
+            cfg.App.Should().NotBeNull();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

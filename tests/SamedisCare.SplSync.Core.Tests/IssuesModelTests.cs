@@ -1,6 +1,6 @@
 using FluentAssertions;
 using Newtonsoft.Json;
-using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Auth;
 using SamedisCare.Api.Http;
 using SamedisCare.Api.Query;

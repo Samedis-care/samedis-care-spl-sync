@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using SamedisCare.SplSync.Core.Actimed;
-using SamedisCare.SplSync.Core.Api;
+using SamedisCare.Api.V4.Enterprise;
 using SamedisCare.Api.Auth;
 using SamedisCare.Api.Http;
 using SamedisCare.Api.V4.Common;

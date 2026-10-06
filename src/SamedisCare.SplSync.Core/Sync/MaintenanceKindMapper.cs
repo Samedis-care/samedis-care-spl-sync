@@ -56,10 +56,10 @@ public class MaintenanceKindMapper
     /// <summary>
     /// Liefert das passende Mapping-Resultat (nie null). ActimedActivityName ist optional.
     /// </summary>
-    public MaintenanceKindMatch Resolve(string? maintenanceType, string? title, IEnumerable<string>? services)
+    public MaintenanceKindMatch Resolve(string? title, IEnumerable<string>? services)
     {
         var combined = string.Join(" | ",
-            new[] { maintenanceType, title, services == null ? "" : string.Join(",", services) }
+            new[] { title, services == null ? "" : string.Join(",", services) }
             .Where(s => !string.IsNullOrWhiteSpace(s))!);
 
         foreach (var (regex, result) in _rules)
@@ -69,8 +69,4 @@ public class MaintenanceKindMapper
         }
         return _default;
     }
-
-    /// <summary>Backward-compat: liefert nur den Kind-Namen.</summary>
-    public string Map(string? maintenanceType, string? title, IEnumerable<string>? services)
-        => Resolve(maintenanceType, title, services).ActimedKind;
 }
